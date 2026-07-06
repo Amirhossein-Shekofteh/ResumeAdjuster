@@ -1,4 +1,6 @@
-openai
+langgraph
+langchain-openai
+langchain-core
 python-dotenv
 pydantic
 streamlit
