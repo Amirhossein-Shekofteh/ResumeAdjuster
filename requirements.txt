@@ -1,0 +1,11 @@
+openai
+python-dotenv
+pydantic
+streamlit
+pypdf
+python-docx
+pandas
+tenacity
+rich
+pytest
+ruff
