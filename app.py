@@ -18,7 +18,7 @@ from src.utils.logging_utils import trace_to_rows
 
 
 APP_TITLE = "ResumeAdjuster"
-APP_SUBTITLE = "Two-agent LangGraph demo for tailoring a student resume to a target job"
+APP_SUBTITLE = "Tailor suggestions for the resume to a target job using truthful evidence from coursework and experience"
 
 
 def _allowed_upload_types() -> list[str]:
@@ -190,7 +190,7 @@ def _render_agent_1_output(final_result) -> None:
     Display Agent 1 output.
     """
 
-    st.subheader("Agent 1 Output: Job-Resume Gap Analysis")
+    st.subheader("Job Match Review")
 
     if final_result.gap_analysis is None:
         st.info("No gap analysis was generated.")
@@ -211,7 +211,7 @@ def _render_agent_2_output(final_result) -> None:
     Display Agent 2 output.
     """
 
-    st.subheader("Agent 2 Output: Resume Revision")
+    st.subheader("Suggested Resume Changes")
 
     if final_result.resume_revision is None:
         st.info("No resume revision was generated.")
@@ -253,7 +253,7 @@ def _render_workflow_trace(final_result) -> None:
     Display workflow trace for the agentic AI demo.
     """
 
-    st.subheader("Workflow Trace")
+    st.subheader("Review Steps")
 
     if not final_result.agent_trace:
         st.info("No workflow trace available.")
@@ -304,11 +304,21 @@ def main() -> None:
     st.title(APP_TITLE)
     st.caption(APP_SUBTITLE)
 
-    st.sidebar.header("Project Settings")
-    st.sidebar.write(f"Model: `{CONFIG.openai_model}`")
-    st.sidebar.write(f"Temperature: `{CONFIG.model_temperature}`")
-    st.sidebar.write(f"Max input length: `{CONFIG.max_input_text_length}` characters")
-    _render_api_key_notice()
+    st.sidebar.header("ResumeAdjuster")
+    st.sidebar.markdown(
+        """
+    This tool helps tailor a resume to a target job using only truthful information from:
+
+    - the current resume
+    - the job description
+    - coursework and student background details
+    """
+                        )
+    with st.sidebar.expander("Developer details"):
+        st.write(f"Model: `{CONFIG.openai_model}`")
+        st.write(f"Temperature: `{CONFIG.model_temperature}`")
+        st.write(f"Max input length: `{CONFIG.max_input_text_length}` characters")
+        _render_api_key_notice()
 
     if st.sidebar.button("Load sample data"):
         _load_samples_into_session()
@@ -316,14 +326,14 @@ def main() -> None:
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(
-        """
-        **Workflow**
+    """
+    **How it works**
 
-        1. Clean inputs  
-        2. Agent 1 analyzes job-resume gaps  
-        3. Agent 2 revises the resume  
-        4. Final report is generated
-        """
+    1. Review the resume and job description  
+    2. Identify important job requirements and resume gaps  
+    3. Use coursework/background information to improve the resume honestly  
+    4. Generate suggestions and change summary
+    """
     )
 
     job_description, current_resume, coursework_student_info = _render_input_section()
@@ -334,7 +344,7 @@ def main() -> None:
         coursework_student_info=coursework_student_info,
     )
 
-    run_clicked = st.button("Run two-agent resume adjustment", type="primary")
+    run_clicked = st.button("Generate tailored suggestions", type="primary")
 
     if run_clicked:
         if input_errors:
@@ -356,7 +366,7 @@ def main() -> None:
             )
             return
 
-        with st.spinner("Running LangGraph workflow..."):
+        with st.spinner("Reviewing the resume and generating suggestions..."):
             final_result = run_resume_adjuster(
                 job_description=job_description,
                 current_resume=current_resume,
@@ -364,22 +374,21 @@ def main() -> None:
             )
 
         if final_result.success:
-            st.success("Resume adjustment completed.")
+            st.success("Tailored suggestions generated.")
         else:
-            st.warning("Workflow completed with errors or warnings.")
+            st.warning("Resume review completed, but some issues need attention.")
+
 
         if final_result.errors:
             with st.expander("Errors", expanded=True):
                 for error in final_result.errors:
                     st.error(error)
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        tab1, tab2, tab3 = st.tabs(
             [
-                "Agent 1: Gap Analysis",
-                "Agent 2: Resume Revision",
-                "Updated Resume",
-                "Workflow Trace",
-                "Full Report",
+                "Job Match Review",
+                "Suggested Resume Changes",
+                "Review Steps",
             ]
         )
 
@@ -390,19 +399,15 @@ def main() -> None:
             _render_agent_2_output(final_result)
 
         with tab3:
-            _render_updated_resume(final_result)
-
-        with tab4:
             _render_workflow_trace(final_result)
 
-        with tab5:
-            st.markdown(render_final_report(final_result))
-            _render_full_report_download(final_result)
 
     else:
         st.info(
-            "Upload or paste the three inputs, then click "
-            "**Run two-agent resume adjustment**."
+            "Upload or paste your resume, target job description, and "
+            "coursework/background information, then click "
+            "**Generate tailored suggestions**."
+
         )
 
 
