@@ -21,12 +21,15 @@ class AppConfig:
     """
     Central project configuration.
 
-    The OpenAI API key is optional at import time so the project can be built,
+    API keys are optional at import time so the project can be built,
     tested, and committed before purchasing or adding an API key.
     """
 
+    llm_provider: str
     openai_api_key: str | None
     openai_model: str
+    gemini_api_key: str | None
+    gemini_model: str
     model_temperature: float
     max_input_text_length: int
     allowed_file_types: tuple[str, ...]
@@ -64,8 +67,11 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 CONFIG = AppConfig(
+    llm_provider=(_get_optional_env("LLM_PROVIDER") or "openai").lower(),
     openai_api_key=_get_optional_env("OPENAI_API_KEY"),
     openai_model=_get_optional_env("OPENAI_MODEL") or "gpt-4.1-mini",
+    gemini_api_key=_get_optional_env("GEMINI_API_KEY"),
+    gemini_model=_get_optional_env("GEMINI_MODEL") or "gemini-2.5-flash",
     model_temperature=_get_float_env("MODEL_TEMPERATURE", 0.2),
     max_input_text_length=_get_int_env("MAX_INPUT_TEXT_LENGTH", 20_000),
     allowed_file_types=(".txt", ".pdf", ".docx"),
@@ -87,3 +93,20 @@ def require_openai_api_key() -> str:
         )
 
     return CONFIG.openai_api_key
+
+
+def require_gemini_api_key() -> str:
+    """
+    Return the Gemini API key when an LLM call is about to run.
+
+    This prevents the project from crashing during normal imports, tests,
+    or development before the user has added an API key.
+    """
+
+    if not CONFIG.gemini_api_key:
+        raise RuntimeError(
+            "GEMINI_API_KEY is not set. "
+            "Create a local .env file and add GEMINI_API_KEY before running the AI agents."
+        )
+
+    return CONFIG.gemini_api_key

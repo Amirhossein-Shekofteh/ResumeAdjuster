@@ -1,5 +1,6 @@
 langgraph
 langchain-openai
+langchain-google-genai
 langchain-core
 python-dotenv
 pydantic

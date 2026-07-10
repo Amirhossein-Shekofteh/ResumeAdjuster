@@ -115,6 +115,7 @@ def test_runner_accepts_sample_input_with_mocked_agents(monkeypatch: Any) -> Non
     def fake_run_gap_analysis(
         job_description: str,
         current_resume: str,
+        llm_client: Any = None,
     ) -> GapAnalysisResult:
         assert "Python" in job_description
         assert "Python" in current_resume
@@ -124,6 +125,7 @@ def test_runner_accepts_sample_input_with_mocked_agents(monkeypatch: Any) -> Non
         current_resume: str,
         coursework_student_info: str,
         revision_brief: RevisionBrief,
+        llm_client: Any = None,
     ) -> ResumeRevisionResult:
         assert "Python" in current_resume
         assert "coursework" in coursework_student_info.lower()

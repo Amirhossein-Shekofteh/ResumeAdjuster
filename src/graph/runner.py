@@ -4,6 +4,7 @@ from typing import Any
 
 from src.graph.builder import build_resume_adjuster_graph
 from src.graph.state import ResumeAdjusterState, build_initial_state
+from src.llm_client import LLMClient
 from src.schemas import AgentTraceStep, FinalWorkflowResult
 
 
@@ -55,6 +56,7 @@ def run_resume_adjuster(
     job_description: str,
     current_resume: str,
     coursework_student_info: str,
+    llm_client: LLMClient | None = None,
 ) -> FinalWorkflowResult:
     """
     Run the full ResumeAdjuster graph.
@@ -66,6 +68,7 @@ def run_resume_adjuster(
         job_description=job_description,
         current_resume=current_resume,
         coursework_student_info=coursework_student_info,
+        llm_client=llm_client,
     )
 
     try:

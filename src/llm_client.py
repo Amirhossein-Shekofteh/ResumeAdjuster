@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Any, TypeVar
 
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ValidationError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from src.config import CONFIG, require_openai_api_key
+from src.config import CONFIG, require_gemini_api_key, require_openai_api_key
 
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
@@ -113,40 +114,60 @@ class LLMClient:
     """
     Thin wrapper around the project LLM.
 
-    Agents should use this client instead of creating their own ChatOpenAI
-    objects. This keeps model configuration, retries, and error handling in
-    one place.
+    Agents should use this client instead of creating their own chat model
+    objects. This keeps provider selection, model configuration, retries, and
+    error handling in one place.
     """
 
     def __init__(
         self,
+        provider: str | None = None,
         model_name: str | None = None,
         temperature: float | None = None,
     ) -> None:
-        self.model_name = model_name or CONFIG.openai_model
+        self.provider = (provider or CONFIG.llm_provider).lower()
+        self.model_name = model_name or (
+            CONFIG.gemini_model if self.provider == "gemini" else CONFIG.openai_model
+        )
         self.temperature = (
             CONFIG.model_temperature if temperature is None else temperature
         )
 
-    def _build_chat_model(self) -> ChatOpenAI:
+    def _build_chat_model(self) -> ChatOpenAI | ChatGoogleGenerativeAI:
         """
-        Create the ChatOpenAI model.
+        Create the chat model for the selected provider.
 
         This is intentionally done only when an LLM call is made, so the app
         can be imported and tested before an API key exists.
         """
 
-        try:
-            api_key = require_openai_api_key()
-        except RuntimeError as exc:
-            raise LLMConfigurationError(str(exc)) from exc
+        if self.provider == "openai":
+            try:
+                api_key = require_openai_api_key()
+            except RuntimeError as exc:
+                raise LLMConfigurationError(str(exc)) from exc
 
-        return ChatOpenAI(
-            model=self.model_name,
-            temperature=self.temperature,
-            api_key=api_key,
-            max_retries=0,
-        )
+            return ChatOpenAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                api_key=api_key,
+                max_retries=0,
+            )
+
+        if self.provider == "gemini":
+            try:
+                api_key = require_gemini_api_key()
+            except RuntimeError as exc:
+                raise LLMConfigurationError(str(exc)) from exc
+
+            return ChatGoogleGenerativeAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                google_api_key=api_key,
+                max_retries=0,
+            )
+
+        raise LLMConfigurationError(f"Unsupported LLM provider: {self.provider!r}")
 
     def invoke_text(
         self,

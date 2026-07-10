@@ -8,6 +8,7 @@ import streamlit as st
 from src.config import CONFIG
 from src.document_loader import DocumentLoadingError, load_document
 from src.graph.runner import run_resume_adjuster
+from src.llm_client import LLMClient
 from src.resume_renderer import (
     render_change_summary,
     render_final_report,
@@ -71,16 +72,69 @@ def _read_sample_file(path: str) -> str:
     return sample_path.read_text(encoding="utf-8")
 
 
-def _render_api_key_notice() -> None:
+PROVIDER_LABELS = {"gemini": "Gemini", "openai": "OpenAI"}
+
+
+def _default_provider() -> str:
+    """
+    Pick a sensible default provider based on which API key is available.
+    """
+
+    has_gemini_key = bool(CONFIG.gemini_api_key)
+    has_openai_key = bool(CONFIG.openai_api_key)
+
+    if has_gemini_key and not has_openai_key:
+        return "gemini"
+
+    if has_openai_key and not has_gemini_key:
+        return "openai"
+
+    return CONFIG.llm_provider
+
+
+def _render_provider_picker() -> str:
+    """
+    Render the LLM provider selector and return the chosen provider key.
+    """
+
+    options = ["gemini", "openai"]
+    default_provider = _default_provider()
+    default_index = options.index(default_provider) if default_provider in options else 0
+
+    selected_label = st.sidebar.selectbox(
+        "LLM Provider",
+        options=[PROVIDER_LABELS[option] for option in options],
+        index=default_index,
+        help="Choose which LLM provider to use for generating suggestions.",
+    )
+
+    return next(key for key, label in PROVIDER_LABELS.items() if label == selected_label)
+
+
+def _provider_model_name(provider: str) -> str:
+    return CONFIG.gemini_model if provider == "gemini" else CONFIG.openai_model
+
+
+def _provider_api_key(provider: str) -> str | None:
+    return CONFIG.gemini_api_key if provider == "gemini" else CONFIG.openai_api_key
+
+
+def _provider_env_var_name(provider: str) -> str:
+    return "GEMINI_API_KEY" if provider == "gemini" else "OPENAI_API_KEY"
+
+
+def _render_api_key_notice(provider: str) -> None:
     """
     Show API-key status without exposing secret values.
     """
 
-    if CONFIG.openai_api_key:
-        st.sidebar.success("OpenAI API key detected.")
+    label = PROVIDER_LABELS[provider]
+
+    if _provider_api_key(provider):
+        st.sidebar.success(f"{label} API key detected.")
     else:
         st.sidebar.warning(
-            "OpenAI API key is not set yet. You can build and view the app, "
+            f"{label} API key is not set yet. You can build and view the app, "
             "but the agent workflow will need a key before it can run."
         )
 
@@ -314,11 +368,14 @@ def main() -> None:
     - coursework and student background details
     """
                         )
+    provider = _render_provider_picker()
+
     with st.sidebar.expander("Developer details"):
-        st.write(f"Model: `{CONFIG.openai_model}`")
+        st.write(f"Provider: `{PROVIDER_LABELS[provider]}`")
+        st.write(f"Model: `{_provider_model_name(provider)}`")
         st.write(f"Temperature: `{CONFIG.model_temperature}`")
         st.write(f"Max input length: `{CONFIG.max_input_text_length}` characters")
-        _render_api_key_notice()
+        _render_api_key_notice(provider)
 
     if st.sidebar.button("Load sample data"):
         _load_samples_into_session()
@@ -352,25 +409,31 @@ def main() -> None:
                 st.error(error)
             return
 
-        if not CONFIG.openai_api_key:
+        if not _provider_api_key(provider):
+            env_var_name = _provider_env_var_name(provider)
             st.error(
-                "OPENAI_API_KEY is not set. Add your API key to the local `.env` file "
+                f"{env_var_name} is not set. Add your API key to the local `.env` file "
                 "before running the agents."
             )
             st.code(
-                "OPENAI_API_KEY=your_real_key_here\n"
-                "OPENAI_MODEL=gpt-4.1-mini\n"
+                f"LLM_PROVIDER={provider}\n"
+                f"{env_var_name}=your_real_key_here\n"
+                f"{'GEMINI_MODEL' if provider == 'gemini' else 'OPENAI_MODEL'}="
+                f"{_provider_model_name(provider)}\n"
                 "MODEL_TEMPERATURE=0.2\n"
                 "MAX_INPUT_TEXT_LENGTH=20000",
                 language="text",
             )
             return
 
+        llm_client = LLMClient(provider=provider)
+
         with st.spinner("Reviewing the resume and generating suggestions..."):
             final_result = run_resume_adjuster(
                 job_description=job_description,
                 current_resume=current_resume,
                 coursework_student_info=coursework_student_info,
+                llm_client=llm_client,
             )
 
         if final_result.success:

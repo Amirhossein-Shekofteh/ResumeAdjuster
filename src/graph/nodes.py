@@ -168,6 +168,7 @@ def gap_analysis_node(state: ResumeAdjusterState) -> dict[str, Any]:
         gap_analysis = run_gap_analysis(
             job_description=cleaned_job_description,
             current_resume=cleaned_current_resume,
+            llm_client=state.get("llm_client"),
         )
 
         trace = _trace_step(
@@ -257,6 +258,7 @@ def resume_revision_node(state: ResumeAdjusterState) -> dict[str, Any]:
             current_resume=cleaned_current_resume,
             coursework_student_info=cleaned_coursework_student_info,
             revision_brief=revision_brief,
+            llm_client=state.get("llm_client"),
         )
 
         trace = _trace_step(

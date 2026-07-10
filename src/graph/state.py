@@ -3,6 +3,7 @@ from __future__ import annotations
 from operator import add
 from typing import Annotated, TypedDict
 
+from src.llm_client import LLMClient
 from src.schemas import (
     AgentTraceStep,
     FinalWorkflowResult,
@@ -43,6 +44,7 @@ class ResumeAdjusterState(TypedDict, total=False):
     job_description: str
     current_resume: str
     coursework_student_info: str
+    llm_client: LLMClient | None
 
     cleaned_job_description: str
     cleaned_current_resume: str
@@ -63,6 +65,7 @@ def build_initial_state(
     job_description: str,
     current_resume: str,
     coursework_student_info: str,
+    llm_client: LLMClient | None = None,
 ) -> ResumeAdjusterState:
     """
     Build the initial state for the ResumeAdjuster graph.
@@ -72,6 +75,7 @@ def build_initial_state(
         "job_description": job_description,
         "current_resume": current_resume,
         "coursework_student_info": coursework_student_info,
+        "llm_client": llm_client,
         "gap_analysis": None,
         "revision_brief": None,
         "resume_revision": None,
