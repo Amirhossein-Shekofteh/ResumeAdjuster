@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from textwrap import dedent
 
+from src.schemas import GapAnalysisResult
+
 
 GAP_ANALYSIS_SYSTEM_PROMPT = dedent(
     """
@@ -141,5 +143,72 @@ def build_gap_analysis_user_prompt(
         - Do not rewrite the resume.
         - Do not invent student experience.
         - Prepare a strong handoff for Agent 2.
+        """
+    ).strip()
+
+
+def build_gap_analysis_repair_user_prompt(
+    job_description: str,
+    current_resume: str,
+    previous_result: GapAnalysisResult,
+    validation_errors: list[str],
+) -> str:
+    """
+    Build the repair user prompt for Agent 1.
+
+    Used when a deterministic semantic check found grounding or referential
+    integrity problems in a previous GapAnalysisResult. Agent 1 must return a
+    full corrected result, not a diff.
+    """
+
+    job_description = job_description.strip()
+    current_resume = current_resume.strip()
+
+    if not job_description:
+        raise ValueError("job_description cannot be empty.")
+
+    if not current_resume:
+        raise ValueError("current_resume cannot be empty.")
+
+    if not validation_errors:
+        raise ValueError("validation_errors cannot be empty.")
+
+    previous_result_json = previous_result.model_dump_json(indent=2)
+    errors_list = "\n".join(f"- {error}" for error in validation_errors)
+
+    return dedent(
+        f"""
+        Your previous gap analysis failed deterministic validation. Produce a
+        corrected, complete gap analysis that fixes every issue below.
+
+        # Target Job Description
+
+        {job_description}
+
+        # Current Student Resume
+
+        {current_resume}
+
+        # Your Previous Output
+
+        {previous_result_json}
+
+        # Validation Errors To Fix
+
+        {errors_list}
+
+        # What to produce
+
+        - Return a full, corrected GapAnalysisResult matching the schema, not a
+          diff or partial update.
+        - Every resume evidence text and low-relevance item text must be an
+          exact or near-exact quote that actually appears in the current
+          resume above.
+        - Every requirement_id you reference elsewhere must exist in your own
+          job_requirements list.
+        - Do not introduce duplicate requirement_id, evidence_id, gap_id, or
+          item_id values.
+        - Preserve everything from your previous output that was already
+          correct; only change what is needed to fix the validation errors.
         """
     ).strip()

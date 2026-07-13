@@ -7,6 +7,7 @@ pydantic
 streamlit
 pypdf
 python-docx
+pypandoc
 pandas
 tenacity
 rich

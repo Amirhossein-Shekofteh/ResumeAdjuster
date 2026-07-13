@@ -273,10 +273,11 @@ def _render_agent_2_output(final_result) -> None:
 
     resume_revision = final_result.resume_revision
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Changes", len(resume_revision.changes))
     col2.metric("Keywords Added", len(resume_revision.added_keywords))
     col3.metric("Warnings", len(resume_revision.warnings))
+    col4.metric("Confidence", f"{resume_revision.semantic_confidence}/100")
 
     st.markdown(render_change_summary(resume_revision))
 

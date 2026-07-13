@@ -3,6 +3,7 @@ from __future__ import annotations
 from operator import add
 from typing import Annotated, TypedDict
 
+from src.checks.semantic_check_result import SemanticCheckResult
 from src.llm_client import LLMClient
 from src.schemas import (
     AgentTraceStep,
@@ -32,6 +33,14 @@ class ResumeAdjusterState(TypedDict, total=False):
     - revision_brief
     - resume_revision
 
+    Semantic check / repair loop (Agent 1):
+    - gap_analysis_semantic_check
+    - gap_analysis_repair_attempts
+
+    Semantic check / repair loop (Agent 2):
+    - resume_revision_semantic_check
+    - resume_revision_repair_attempts
+
     Final output:
     - final_resume_markdown
     - final_output
@@ -53,6 +62,12 @@ class ResumeAdjusterState(TypedDict, total=False):
     gap_analysis: GapAnalysisResult | None
     revision_brief: RevisionBrief | None
     resume_revision: ResumeRevisionResult | None
+
+    gap_analysis_semantic_check: SemanticCheckResult | None
+    gap_analysis_repair_attempts: int
+
+    resume_revision_semantic_check: SemanticCheckResult | None
+    resume_revision_repair_attempts: int
 
     final_resume_markdown: str | None
     final_output: FinalWorkflowResult | None
@@ -79,6 +94,10 @@ def build_initial_state(
         "gap_analysis": None,
         "revision_brief": None,
         "resume_revision": None,
+        "gap_analysis_semantic_check": None,
+        "gap_analysis_repair_attempts": 0,
+        "resume_revision_semantic_check": None,
+        "resume_revision_repair_attempts": 0,
         "final_resume_markdown": None,
         "final_output": None,
         "errors": [],

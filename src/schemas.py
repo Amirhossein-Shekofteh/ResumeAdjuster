@@ -146,6 +146,21 @@ class RevisionBrief(BaseModel):
         default_factory=list,
         description="Specific editing instructions for Agent 2."
     )
+    gap_analysis_confidence: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        description="Deterministic 0-100 confidence that Agent 1's output is grounded and "
+                     "internally consistent. Lower values mean unresolved semantic issues "
+                     "remain after repair attempts; Agent 2 should be extra conservative "
+                     "in that case."
+    )
+    gap_analysis_semantic_warnings: list[str] = Field(
+        default_factory=list,
+        description="Unresolved deterministic validation issues (e.g. hallucinated evidence "
+                     "quotes, dangling requirement references) that could not be fixed after "
+                     "repair attempts."
+    )
 
 
 class GapAnalysisResult(BaseModel):
@@ -245,6 +260,20 @@ class ResumeRevisionResult(BaseModel):
     )
     revision_summary: str = Field(
         description="Plain-language explanation of the resume revision."
+    )
+    semantic_confidence: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        description="Deterministic 0-100 confidence that this resume revision is "
+                     "internally consistent and truthfully grounded. Lower values mean "
+                     "unresolved semantic issues remain after repair attempts."
+    )
+    semantic_warnings: list[str] = Field(
+        default_factory=list,
+        description="Unresolved deterministic validation issues (e.g. a reported change "
+                     "not actually present in the resume, an unsupported added keyword) "
+                     "that could not be fixed after repair attempts."
     )
 
 

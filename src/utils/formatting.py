@@ -180,9 +180,28 @@ def format_gap_table(gaps: Iterable[GapItem]) -> str:
     return "\n".join(lines)
 
 
+def _format_change_block(change: ResumeChange) -> str:
+    block: list[str] = [
+        f"- **{change.change_id}**",
+        f"  - Section: {change.resume_section}",
+        f"  - Reason: {change.reason}",
+        f"  - Evidence source: {change.evidence_source}",
+    ]
+
+    if change.before:
+        block.append(f"  - Before: {change.before}")
+
+    if change.after:
+        block.append(f"  - After: {change.after}")
+
+    return "\n".join(block)
+
+
 def format_change_summary(changes: Iterable[ResumeChange]) -> str:
     """
-    Format resume changes into a readable Markdown list.
+    Format resume changes into a readable Markdown summary, grouped by what
+    happened to each piece of content: kept as-is, rewritten, added, or
+    removed (including anything auto-removed by deterministic validation).
     """
 
     changes = list(changes)
@@ -190,25 +209,23 @@ def format_change_summary(changes: Iterable[ResumeChange]) -> str:
     if not changes:
         return "_No resume changes were recorded._"
 
-    lines: list[str] = []
+    groups: list[tuple[str, list[ResumeChange]]] = [
+        ("Kept As-Is", [c for c in changes if c.change_type == "keep"]),
+        ("Rewritten", [c for c in changes if c.change_type in {"rewrite", "reorder"}]),
+        ("Added", [c for c in changes if c.change_type == "add"]),
+        ("Removed", [c for c in changes if c.change_type == "remove"]),
+    ]
 
-    for change in changes:
-        block: list[str] = [
-            f"- **{change.change_id} — {change.change_type.upper()}**",
-            f"  - Section: {change.resume_section}",
-            f"  - Reason: {change.reason}",
-            f"  - Evidence source: {change.evidence_source}",
-        ]
+    sections: list[str] = []
 
-        if change.before:
-            block.append(f"  - Before: {change.before}")
+    for label, group_changes in groups:
+        if not group_changes:
+            continue
 
-        if change.after:
-            block.append(f"  - After: {change.after}")
+        lines = "\n".join(_format_change_block(change) for change in group_changes)
+        sections.append(f"### {label} ({len(group_changes)})\n\n{lines}")
 
-        lines.append("\n".join(block))
-
-    return "\n".join(lines)
+    return "\n\n".join(sections)
 
 
 def truncate_display_text(text: str, max_length: int = 300) -> str:
