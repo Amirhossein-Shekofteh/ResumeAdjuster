@@ -70,6 +70,11 @@ def test_analyze_overrides_llm_score_with_computed_score() -> None:
     )
 
     assert result.estimated_fit_score == 0
+    # The final fit score/summary must also be threaded onto the nested
+    # revision_brief, since Agent 2 only ever sees the brief, never the
+    # outer GapAnalysisResult.
+    assert result.revision_brief.estimated_fit_score == 0
+    assert result.revision_brief.overall_fit_summary == "Summary."
 
 
 class _FakeRepairLLMClient:
@@ -177,3 +182,5 @@ def test_repair_sends_previous_result_and_errors_and_overrides_score() -> None:
     assert result.estimated_fit_score == compute_fit_score(
         result.model_copy(update={"estimated_fit_score": 99})
     )
+    assert result.revision_brief.estimated_fit_score == result.estimated_fit_score
+    assert result.revision_brief.overall_fit_summary == "Summary."

@@ -25,6 +25,34 @@ RESUME_REVISION_SYSTEM_PROMPT = dedent(
     as trustworthy evidence, and lean more heavily on the current resume and
     coursework/student background information you were given directly.
 
+    The revision brief also includes estimated_fit_score (0-100, deterministic)
+    and overall_fit_summary, both computed by Agent 1. Use them as signals when
+    deciding whether a revision is worthwhile, alongside gaps_to_address and
+    resume_evidence_to_preserve.
+
+    Before writing anything, decide which of three outcomes applies, and set
+    the `decision` field accordingly:
+    - "revise": truthful evidence from the current resume or the coursework/
+      student background information can meaningfully strengthen the resume
+      for this role. This is the common case.
+    - "keep_already_strong": resume_evidence_to_preserve and a high
+      estimated_fit_score indicate the resume already fits this role well, and
+      no truthful change would meaningfully improve it.
+    - "keep_insufficient_fit": the gaps_to_address are significant (especially
+      any tied to must_address_requirement_ids), and neither the current
+      resume nor the coursework/student background information gives you
+      truthful material to close them. Revising would require fabricating or
+      stretching evidence, so it is more honest to leave the resume unchanged
+      and tell the student why.
+
+    Hard rule for "keep_already_strong" and "keep_insufficient_fit": you must
+    return updated_resume_markdown exactly as the original current resume,
+    unchanged, and changes, added_keywords, and removed_or_reduced_items must
+    all be empty. Use revision_summary to explain, in plain language, which of
+    the two "keep" outcomes applies and why (referencing the fit score,
+    fit summary, or specific gaps as appropriate) -- for these two outcomes,
+    revision_summary is your explanation of the decision, not a change log.
+
     Core responsibilities:
     1. Read the current resume.
     2. Read the coursework and student background information.
@@ -159,11 +187,18 @@ def build_resume_revision_user_prompt(
 
         Produce a structured resume revision with:
 
-        1. updated_resume_markdown
+        1. decision
+           - "revise", "keep_already_strong", or "keep_insufficient_fit" (see
+             the system prompt for when to use each).
+           - If not "revise", updated_resume_markdown must equal the original
+             current resume exactly, and changes, added_keywords, and
+             removed_or_reduced_items must all be empty.
+
+        2. updated_resume_markdown
            - Full revised resume in Markdown.
            - Keep it concise, readable, and appropriate for a student applicant.
 
-        2. changes
+        3. changes
            - List each meaningful change (change_type: add, remove, rewrite, or
              reorder). Include what changed, where it changed, why it changed,
              and what evidence supports it.
@@ -174,25 +209,28 @@ def build_resume_revision_user_prompt(
              the resume: what was kept, what was rewritten, what was added,
              and what was removed -- not only a list of edits.
 
-        3. added_keywords
+        4. added_keywords
            - List only keywords that were added truthfully.
            - Every added keyword must be supported by the original resume or the
              coursework/student background information.
 
-        4. removed_or_reduced_items
+        5. removed_or_reduced_items
            - List content that was removed, shortened, or de-emphasized.
 
-        5. evidence_used_from_coursework
+        6. evidence_used_from_coursework
            - List coursework, projects, assignments, labs, tools, or background
              details used to strengthen the resume.
 
-        6. warnings
+        7. warnings
            - List gaps that could not be filled truthfully.
            - List any requirements from the revision brief that still lack
              evidence.
 
-        7. revision_summary
-           - Explain the overall revision strategy in plain language.
+        8. revision_summary
+           - If decision is "revise", explain the overall revision strategy in
+             plain language.
+           - If decision is "keep_already_strong" or "keep_insufficient_fit",
+             explain why in plain language instead.
 
         Remember:
         - Do not invent anything.
@@ -269,6 +307,13 @@ def build_resume_revision_repair_user_prompt(
 
         - Return a full, corrected ResumeRevisionResult matching the schema,
           not a diff or partial update.
+        - The `decision` field must be consistent with the rest of the output:
+          if decision is "keep_already_strong" or "keep_insufficient_fit",
+          updated_resume_markdown must equal the original current resume
+          exactly, and changes, added_keywords, and removed_or_reduced_items
+          must all be empty. If the previous output's decision does not match
+          what the output actually contains, fix whichever one is wrong so
+          they agree.
         - Every add/rewrite change's `after` text must actually appear in
           updated_resume_markdown, and must have a non-empty evidence_source.
         - Every remove change's `before` text must no longer appear anywhere

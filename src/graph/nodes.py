@@ -12,6 +12,7 @@ from src.checks.resume_revision_checker import (
     finalize_unsupported_resume_revision,
     run_resume_revision_semantic_check,
 )
+from src.checks.review_gate import run_agent1_review_gate, run_agent2_review_gate
 from src.checks.semantic_check_result import compute_semantic_confidence
 from src.graph.state import ResumeAdjusterState
 from src.schemas import AgentTraceStep, FinalWorkflowResult
@@ -382,34 +383,99 @@ def gap_analysis_repair_node(state: ResumeAdjusterState) -> dict[str, Any]:
 
 def route_after_semantic_check(
     state: ResumeAdjusterState,
-) -> Literal["resume_revision", "gap_analysis_repair"]:
+) -> Literal["agent1_review_gate", "gap_analysis_repair"]:
     """
-    Decide whether to proceed to Agent 2 or send Agent 1's output back for repair.
+    Decide whether to proceed to Agent 1's review gate or send Agent 1's
+    output back for repair.
 
     Never halts the workflow: once repair attempts are exhausted, the
     semantic_check_node has already attached the (possibly low) confidence
-    score and warnings to the revision_brief, so we proceed to Agent 2 anyway.
+    score and warnings to the revision_brief, so we proceed to the review
+    gate (and then Agent 2) anyway.
     """
 
     if _has_errors(state):
-        return "resume_revision"
+        return "agent1_review_gate"
 
     check = state.get("gap_analysis_semantic_check")
 
     if check is None or check.passed:
-        return "resume_revision"
+        return "agent1_review_gate"
 
     attempts = state.get("gap_analysis_repair_attempts", 0)
 
     if attempts < MAX_GAP_ANALYSIS_REPAIR_ATTEMPTS:
         return "gap_analysis_repair"
 
-    return "resume_revision"
+    return "agent1_review_gate"
+
+
+def agent1_review_gate_node(state: ResumeAdjusterState) -> dict[str, Any]:
+    """
+    Node 5: Deterministic reviewer gate for Agent 1's scope/boundaries.
+
+    Runs once Agent 1's own pipeline (semantic check + any repairs) has
+    settled, right before handoff to Agent 2. Unlike the semantic checker,
+    this never triggers a repair loop and never touches `errors` directly --
+    a blocked verdict is only folded into the final result in
+    final_output_node, so it can never cause an earlier or later node to be
+    skipped.
+    """
+
+    if _has_errors(state):
+        trace = _trace_step(
+            step_number=5,
+            step_name="Agent 1 Review Gate",
+            agent_name=None,
+            status="warning",
+            input_summary="Skipped because previous workflow errors exist.",
+            output_summary="Review gate was not run.",
+        )
+
+        return {"agent_trace": [trace]}
+
+    gap_analysis = state.get("gap_analysis")
+    semantic_check = state.get("gap_analysis_semantic_check")
+    cleaned_job_description = _required_text(state, "cleaned_job_description")
+    cleaned_current_resume = _required_text(state, "cleaned_current_resume")
+
+    review = run_agent1_review_gate(
+        gap_analysis=gap_analysis,
+        semantic_check=semantic_check,
+        job_description=cleaned_job_description,
+        current_resume=cleaned_current_resume,
+    )
+
+    trace_status = "success" if review.verdict == "approved" else (
+        "warning" if review.verdict == "needs_human_review" else "error"
+    )
+
+    trace = _trace_step(
+        step_number=5,
+        step_name="Agent 1 Review Gate",
+        agent_name=None,
+        status=trace_status,
+        input_summary="Agent 1's gap analysis and semantic check result.",
+        output_summary=(
+            f"Review gate {review.verdict} "
+            f"({len(review.blockers)} blocker(s), {len(review.warnings)} warning(s))."
+        ),
+        metadata={
+            "verdict": review.verdict,
+            "blocker_count": len(review.blockers),
+            "warning_count": len(review.warnings),
+        },
+    )
+
+    return {
+        "agent1_review_gate": review,
+        "agent_trace": [trace],
+    }
 
 
 def resume_revision_node(state: ResumeAdjusterState) -> dict[str, Any]:
     """
-    Node 5: Run Agent 2.
+    Node 6: Run Agent 2.
 
     Agent:
     - Resume Revision Agent
@@ -425,7 +491,7 @@ def resume_revision_node(state: ResumeAdjusterState) -> dict[str, Any]:
 
     if _has_errors(state):
         trace = _trace_step(
-            step_number=5,
+            step_number=6,
             step_name="Resume Revision",
             agent_name="Resume Revision Agent",
             status="warning",
@@ -455,7 +521,7 @@ def resume_revision_node(state: ResumeAdjusterState) -> dict[str, Any]:
         )
 
         trace = _trace_step(
-            step_number=5,
+            step_number=6,
             step_name="Resume Revision",
             agent_name="Resume Revision Agent",
             status="success",
@@ -484,7 +550,7 @@ def resume_revision_node(state: ResumeAdjusterState) -> dict[str, Any]:
         error_message = f"Resume revision failed: {exc}"
 
         trace = _trace_step(
-            step_number=5,
+            step_number=6,
             step_name="Resume Revision",
             agent_name="Resume Revision Agent",
             status="error",
@@ -503,7 +569,7 @@ def resume_revision_node(state: ResumeAdjusterState) -> dict[str, Any]:
 
 def resume_revision_semantic_check_node(state: ResumeAdjusterState) -> dict[str, Any]:
     """
-    Node 6: Deterministic semantic check on Agent 2's output.
+    Node 7: Deterministic semantic check on Agent 2's output.
 
     Unlike Agent 1's checker, truthfulness failures here (an unsupported
     added keyword, an unverifiable coursework claim) are hard errors, not
@@ -515,7 +581,7 @@ def resume_revision_semantic_check_node(state: ResumeAdjusterState) -> dict[str,
 
     if _has_errors(state):
         trace = _trace_step(
-            step_number=6,
+            step_number=7,
             step_name="Resume Revision Semantic Check",
             agent_name=None,
             status="warning",
@@ -553,7 +619,7 @@ def resume_revision_semantic_check_node(state: ResumeAdjusterState) -> dict[str,
     )
 
     trace = _trace_step(
-        step_number=6,
+        step_number=7,
         step_name="Resume Revision Semantic Check",
         agent_name=None,
         status=trace_status,
@@ -581,12 +647,12 @@ def resume_revision_semantic_check_node(state: ResumeAdjusterState) -> dict[str,
 
 def resume_revision_repair_node(state: ResumeAdjusterState) -> dict[str, Any]:
     """
-    Node 7: Ask Agent 2 to repair a resume revision that failed semantic check.
+    Node 8: Ask Agent 2 to repair a resume revision that failed semantic check.
     """
 
     if _has_errors(state):
         trace = _trace_step(
-            step_number=7,
+            step_number=8,
             step_name="Resume Revision Repair",
             agent_name="Resume Revision Agent",
             status="warning",
@@ -627,7 +693,7 @@ def resume_revision_repair_node(state: ResumeAdjusterState) -> dict[str, Any]:
         )
 
         trace = _trace_step(
-            step_number=7,
+            step_number=8,
             step_name="Resume Revision Repair",
             agent_name="Resume Revision Agent",
             status="success",
@@ -649,7 +715,7 @@ def resume_revision_repair_node(state: ResumeAdjusterState) -> dict[str, Any]:
         error_message = f"Resume revision repair failed: {exc}"
 
         trace = _trace_step(
-            step_number=7,
+            step_number=8,
             step_name="Resume Revision Repair",
             agent_name="Resume Revision Agent",
             status="error",
@@ -665,7 +731,7 @@ def resume_revision_repair_node(state: ResumeAdjusterState) -> dict[str, Any]:
 
 def resume_revision_finalize_node(state: ResumeAdjusterState) -> dict[str, Any]:
     """
-    Node 8: Deterministically strip unsupported content from Agent 2's output.
+    Node 9: Deterministically strip unsupported content from Agent 2's output.
 
     Only reached once repair attempts are exhausted and the check still
     fails. No LLM call: mechanically reverts/removes exactly the content that
@@ -675,7 +741,7 @@ def resume_revision_finalize_node(state: ResumeAdjusterState) -> dict[str, Any]:
 
     if _has_errors(state):
         trace = _trace_step(
-            step_number=8,
+            step_number=9,
             step_name="Resume Revision Finalize",
             agent_name=None,
             status="warning",
@@ -701,7 +767,7 @@ def resume_revision_finalize_node(state: ResumeAdjusterState) -> dict[str, Any]:
     )
 
     trace = _trace_step(
-        step_number=8,
+        step_number=9,
         step_name="Resume Revision Finalize",
         agent_name=None,
         status="warning",
@@ -728,19 +794,20 @@ def resume_revision_finalize_node(state: ResumeAdjusterState) -> dict[str, Any]:
 
 def route_after_resume_revision_semantic_check(
     state: ResumeAdjusterState,
-) -> Literal["final_output", "resume_revision_repair", "resume_revision_finalize"]:
+) -> Literal["agent2_review_gate", "resume_revision_repair", "resume_revision_finalize"]:
     """
-    Decide whether to finish, repair Agent 2's output, or deterministically
-    strip unsupported content once repair attempts are exhausted.
+    Decide whether to move on to Agent 2's review gate, repair Agent 2's
+    output, or deterministically strip unsupported content once repair
+    attempts are exhausted.
     """
 
     if _has_errors(state):
-        return "final_output"
+        return "agent2_review_gate"
 
     check = state.get("resume_revision_semantic_check")
 
     if check is None or check.passed:
-        return "final_output"
+        return "agent2_review_gate"
 
     attempts = state.get("resume_revision_repair_attempts", 0)
 
@@ -750,9 +817,72 @@ def route_after_resume_revision_semantic_check(
     return "resume_revision_finalize"
 
 
+def agent2_review_gate_node(state: ResumeAdjusterState) -> dict[str, Any]:
+    """
+    Node 10: Deterministic reviewer gate for Agent 2's scope/boundaries.
+
+    Runs once Agent 2's own pipeline (semantic check, any repairs, and any
+    deterministic finalization) has settled, right before the final output
+    is built. Never touches `errors` directly -- a blocked verdict is only
+    folded into the final result in final_output_node.
+    """
+
+    if _has_errors(state):
+        trace = _trace_step(
+            step_number=10,
+            step_name="Agent 2 Review Gate",
+            agent_name=None,
+            status="warning",
+            input_summary="Skipped because previous workflow errors exist.",
+            output_summary="Review gate was not run.",
+        )
+
+        return {"agent_trace": [trace]}
+
+    resume_revision = state.get("resume_revision")
+    semantic_check = state.get("resume_revision_semantic_check")
+    cleaned_current_resume = _required_text(state, "cleaned_current_resume")
+    cleaned_coursework_student_info = _required_text(
+        state, "cleaned_coursework_student_info"
+    )
+
+    review = run_agent2_review_gate(
+        resume_revision=resume_revision,
+        semantic_check=semantic_check,
+        current_resume=cleaned_current_resume,
+        coursework_student_info=cleaned_coursework_student_info,
+    )
+
+    trace_status = "success" if review.verdict == "approved" else (
+        "warning" if review.verdict == "needs_human_review" else "error"
+    )
+
+    trace = _trace_step(
+        step_number=10,
+        step_name="Agent 2 Review Gate",
+        agent_name=None,
+        status=trace_status,
+        input_summary="Agent 2's resume revision and semantic check result.",
+        output_summary=(
+            f"Review gate {review.verdict} "
+            f"({len(review.blockers)} blocker(s), {len(review.warnings)} warning(s))."
+        ),
+        metadata={
+            "verdict": review.verdict,
+            "blocker_count": len(review.blockers),
+            "warning_count": len(review.warnings),
+        },
+    )
+
+    return {
+        "agent2_review_gate": review,
+        "agent_trace": [trace],
+    }
+
+
 def final_output_node(state: ResumeAdjusterState) -> dict[str, Any]:
     """
-    Node 9: Build final workflow result.
+    Node 11: Build final workflow result.
 
     This is not an agent node.
     """
@@ -763,9 +893,23 @@ def final_output_node(state: ResumeAdjusterState) -> dict[str, Any]:
     gap_analysis = state.get("gap_analysis")
     resume_revision = state.get("resume_revision")
     final_resume_markdown = state.get("final_resume_markdown")
+    agent1_review_gate = state.get("agent1_review_gate")
+    agent2_review_gate = state.get("agent2_review_gate")
 
     if not existing_errors and resume_revision is None:
         new_errors.append("Resume revision result is missing.")
+
+    review_gate_labels = {
+        "agent_1_gap_analysis": "Agent 1 review gate",
+        "agent_2_resume_revision": "Agent 2 review gate",
+    }
+
+    for review_gate in (agent1_review_gate, agent2_review_gate):
+        if review_gate is not None and review_gate.verdict == "blocked":
+            label = review_gate_labels.get(review_gate.stage, review_gate.stage)
+            new_errors.extend(
+                f"{label}: {blocker}" for blocker in review_gate.blockers
+            )
 
     all_errors = existing_errors + new_errors
     success = not all_errors and resume_revision is not None
@@ -778,7 +922,7 @@ def final_output_node(state: ResumeAdjusterState) -> dict[str, Any]:
         output_summary = "Final workflow result created with errors."
 
     trace = _trace_step(
-        step_number=9,
+        step_number=11,
         step_name="Build Final Output",
         agent_name=None,
         status=status,
@@ -796,6 +940,8 @@ def final_output_node(state: ResumeAdjusterState) -> dict[str, Any]:
         success=success,
         gap_analysis=gap_analysis,
         resume_revision=resume_revision,
+        agent1_review_gate=agent1_review_gate,
+        agent2_review_gate=agent2_review_gate,
         final_resume_markdown=final_resume_markdown,
         agent_trace=final_trace,
         errors=all_errors,

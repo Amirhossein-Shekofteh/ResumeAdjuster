@@ -11,6 +11,7 @@ from src.schemas import (
     GapAnalysisResult,
     ResumeRevisionResult,
     RevisionBrief,
+    ReviewGateResult,
 )
 
 
@@ -41,6 +42,10 @@ class ResumeAdjusterState(TypedDict, total=False):
     - resume_revision_semantic_check
     - resume_revision_repair_attempts
 
+    Reviewer gates (scope/boundary checks):
+    - agent1_review_gate
+    - agent2_review_gate
+
     Final output:
     - final_resume_markdown
     - final_output
@@ -68,6 +73,9 @@ class ResumeAdjusterState(TypedDict, total=False):
 
     resume_revision_semantic_check: SemanticCheckResult | None
     resume_revision_repair_attempts: int
+
+    agent1_review_gate: ReviewGateResult | None
+    agent2_review_gate: ReviewGateResult | None
 
     final_resume_markdown: str | None
     final_output: FinalWorkflowResult | None
@@ -98,6 +106,8 @@ def build_initial_state(
         "gap_analysis_repair_attempts": 0,
         "resume_revision_semantic_check": None,
         "resume_revision_repair_attempts": 0,
+        "agent1_review_gate": None,
+        "agent2_review_gate": None,
         "final_resume_markdown": None,
         "final_output": None,
         "errors": [],

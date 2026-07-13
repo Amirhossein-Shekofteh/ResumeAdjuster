@@ -187,6 +187,50 @@ def _find_unsupported_coursework_evidence(
     ]
 
 
+def _find_decision_consistency_issues(
+    resume_revision: ResumeRevisionResult,
+    current_resume: str,
+) -> list[str]:
+    """
+    Verify that `decision` actually matches what Agent 2 produced. A "keep"
+    decision that silently changed the resume, or a "revise" decision that
+    changed nothing, would mislead the student about what actually happened.
+    """
+
+    issues: list[str] = []
+    unchanged = _normalize(resume_revision.updated_resume_markdown) == _normalize(
+        current_resume
+    )
+
+    if resume_revision.decision != "revise":
+        if resume_revision.changes:
+            issues.append(
+                f"Decision is {resume_revision.decision!r} but changes were reported."
+            )
+        if resume_revision.added_keywords:
+            issues.append(
+                f"Decision is {resume_revision.decision!r} but added_keywords is "
+                "non-empty."
+            )
+        if resume_revision.removed_or_reduced_items:
+            issues.append(
+                f"Decision is {resume_revision.decision!r} but "
+                "removed_or_reduced_items is non-empty."
+            )
+        if not unchanged:
+            issues.append(
+                f"Decision is {resume_revision.decision!r} but updated_resume_markdown "
+                "differs from the original current resume."
+            )
+    elif not resume_revision.changes and unchanged:
+        issues.append(
+            "Decision is 'revise' but updated_resume_markdown is identical to the "
+            "original current resume and no changes were reported."
+        )
+
+    return issues
+
+
 def run_resume_revision_semantic_check(
     *,
     resume_revision: ResumeRevisionResult,
@@ -217,6 +261,9 @@ def run_resume_revision_semantic_check(
        background information.
     6. Every evidence_used_from_coursework entry must be grounded in the
        coursework/student background information.
+    7. `decision` must be consistent with the rest of the output: a "keep_*"
+       decision must leave the resume and change-tracking fields untouched,
+       and a "revise" decision must not be a no-op.
     """
 
     errors: list[str] = []
@@ -308,6 +355,13 @@ def run_resume_revision_semantic_check(
             f"evidence_used_from_coursework item {item!r} was not found in the "
             "coursework/student background information."
         )
+
+    # 7. decision must be consistent with the rest of the output.
+    decision_issues = _find_decision_consistency_issues(resume_revision, current_resume)
+    total_checks += 1
+    if decision_issues:
+        failed_checks += 1
+        errors.extend(decision_issues)
 
     passed = not errors
     status: SemanticStatus = "fail" if errors else "warning" if warnings else "pass"
@@ -448,11 +502,42 @@ def finalize_unsupported_resume_revision(
             + "; ".join(unsupported_evidence)
         )
 
+    # Decision consistency: resolve any remaining mismatch between `decision`
+    # and what was actually produced, deterministically and in the direction
+    # that can never fabricate content -- a "keep" decision wins over any
+    # reported changes, and a no-op "revise" is relabeled as "kept as-is".
+    decision = resume_revision.decision
+    removed_or_reduced_items = list(resume_revision.removed_or_reduced_items)
+    markdown_unchanged = _normalize(markdown) == _normalize(current_resume)
+
+    if decision != "revise":
+        has_reported_changes = bool(changes) or bool(added_keywords) or bool(
+            removed_or_reduced_items
+        )
+        if has_reported_changes or not markdown_unchanged:
+            markdown = current_resume
+            changes = []
+            added_keywords = []
+            removed_or_reduced_items = []
+            finalize_notes.append(
+                f"Decision was {decision!r} but the output contained changes; "
+                "reverted updated_resume_markdown to the original resume and "
+                "cleared all reported changes for safety."
+            )
+    elif not changes and markdown_unchanged:
+        decision = "keep_already_strong"
+        finalize_notes.append(
+            "Decision was 'revise' but no actual changes were made; changed "
+            "decision to 'keep_already_strong' to reflect what actually happened."
+        )
+
     finalized = resume_revision.model_copy(
         update={
+            "decision": decision,
             "updated_resume_markdown": markdown,
             "changes": changes,
             "added_keywords": added_keywords,
+            "removed_or_reduced_items": removed_or_reduced_items,
             "evidence_used_from_coursework": evidence_used_from_coursework,
         }
     )

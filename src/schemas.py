@@ -161,6 +161,17 @@ class RevisionBrief(BaseModel):
                      "quotes, dangling requirement references) that could not be fixed after "
                      "repair attempts."
     )
+    estimated_fit_score: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Agent 1's deterministic resume-job fit score (0-100), carried over so "
+                     "Agent 2 can decide whether a truthful revision is worthwhile."
+    )
+    overall_fit_summary: str = Field(
+        default="",
+        description="Agent 1's plain-language fit summary, carried over for the same reason."
+    )
 
 
 class GapAnalysisResult(BaseModel):
@@ -230,11 +241,20 @@ class ResumeChange(BaseModel):
     )
 
 
+ResumeRevisionDecision = Literal["revise", "keep_already_strong", "keep_insufficient_fit"]
+
+
 class ResumeRevisionResult(BaseModel):
     """
     Output from Agent 2: Resume Revision Agent.
     """
 
+    decision: ResumeRevisionDecision = Field(
+        default="revise",
+        description="Agent 2's explicit choice: revise the resume, or keep it unchanged "
+                     "because it's already strong, or keep it unchanged because there isn't "
+                     "enough truthful evidence to strengthen it for this role."
+    )
     updated_resume_markdown: str = Field(
         description="The full revised resume in Markdown format."
     )
@@ -274,6 +294,49 @@ class ResumeRevisionResult(BaseModel):
         description="Unresolved deterministic validation issues (e.g. a reported change "
                      "not actually present in the resume, an unsupported added keyword) "
                      "that could not be fixed after repair attempts."
+    )
+
+
+ReviewStage = Literal["agent_1_gap_analysis", "agent_2_resume_revision"]
+ReviewVerdict = Literal["approved", "blocked", "needs_human_review"]
+
+
+class ReviewGateResult(BaseModel):
+    """
+    Deterministic reviewer-gate verdict for one agent.
+
+    Unlike the semantic checkers (grounding/self-consistency), this checks
+    whether the agent stayed inside its role's scope and boundaries.
+    """
+
+    stage: ReviewStage = Field(
+        description="Which agent this review gate covers."
+    )
+    verdict: ReviewVerdict = Field(
+        description="Overall reviewer-gate verdict."
+    )
+    passed: bool = Field(
+        description="False only when the verdict is blocked."
+    )
+    blockers: list[str] = Field(
+        default_factory=list,
+        description="Scope violations serious enough to fail the review gate."
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Scope concerns worth a human's attention but not blocking."
+    )
+    human_review_required: bool = Field(
+        default=False,
+        description="Whether a human must review this agent's output before use."
+    )
+    human_review_reason: str | None = Field(
+        default=None,
+        description="Why human review is required, if applicable."
+    )
+    policy_notes: list[str] = Field(
+        default_factory=list,
+        description="Static reminders of this agent's scope boundaries."
     )
 
 
@@ -323,6 +386,14 @@ class FinalWorkflowResult(BaseModel):
     resume_revision: ResumeRevisionResult | None = Field(
         default=None,
         description="Agent 2 result."
+    )
+    agent1_review_gate: ReviewGateResult | None = Field(
+        default=None,
+        description="Scope/boundary reviewer-gate verdict for Agent 1."
+    )
+    agent2_review_gate: ReviewGateResult | None = Field(
+        default=None,
+        description="Scope/boundary reviewer-gate verdict for Agent 2."
     )
     final_resume_markdown: str | None = Field(
         default=None,

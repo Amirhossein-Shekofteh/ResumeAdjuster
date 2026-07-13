@@ -65,6 +65,7 @@ def render_change_summary(
         coursework_evidence = resume_revision.evidence_used_from_coursework
         warnings = resume_revision.warnings
         revision_summary = resume_revision.revision_summary
+        decision = resume_revision.decision
     else:
         changes = list(resume_revision)
         added_keywords = []
@@ -72,6 +73,29 @@ def render_change_summary(
         coursework_evidence = []
         warnings = []
         revision_summary = ""
+        decision = "revise"
+
+    if decision != "revise":
+        heading = (
+            "No Changes Made -- Already Strong"
+            if decision == "keep_already_strong"
+            else "No Changes Made -- Insufficient Evidence For This Role"
+        )
+        default_explanation = (
+            "The resume already fits this role well; no truthful change would "
+            "meaningfully improve it."
+            if decision == "keep_already_strong"
+            else "There wasn't enough truthful evidence to strengthen the resume "
+            "for this role."
+        )
+        keep_sections = [
+            f"## {heading}\n\n" + (revision_summary.strip() or default_explanation)
+        ]
+
+        if warnings:
+            keep_sections.append("## Warnings\n\n" + format_warning_list(warnings))
+
+        return "\n\n".join(keep_sections).strip()
 
     sections: list[str] = []
 

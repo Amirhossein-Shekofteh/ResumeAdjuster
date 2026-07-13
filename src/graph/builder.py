@@ -5,6 +5,8 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from src.graph.nodes import (
+    agent1_review_gate_node,
+    agent2_review_gate_node,
     clean_inputs_node,
     final_output_node,
     gap_analysis_node,
@@ -32,18 +34,22 @@ def build_resume_adjuster_graph() -> Any:
       ↓
     gap_analysis_node
       ↓
-    semantic_check_node --(pass, or repairs exhausted)--> resume_revision_node
+    semantic_check_node --(pass, or repairs exhausted)--> agent1_review_gate_node
       ↑                --(fail, attempts remain)-->  gap_analysis_repair_node
       └──────────────────────────────────────────────────┘
       ↓
+    agent1_review_gate_node
+      ↓
     resume_revision_node
       ↓
-    resume_revision_semantic_check_node --(pass)--> final_output_node
+    resume_revision_semantic_check_node --(pass)--> agent2_review_gate_node
       ↑                                --(fail, attempts remain)--> resume_revision_repair_node
       ↑                                --(fail, exhausted)--> resume_revision_finalize_node
       └────────────────────────────────────────────────────────────┘
                                                                        ↓
                                                               resume_revision_finalize_node
+                                                                       ↓
+                                                              agent2_review_gate_node
                                                                        ↓
                                                                  final_output_node
       ↓
@@ -56,10 +62,12 @@ def build_resume_adjuster_graph() -> Any:
     graph.add_node("gap_analysis", gap_analysis_node)
     graph.add_node("semantic_check", semantic_check_node)
     graph.add_node("gap_analysis_repair", gap_analysis_repair_node)
+    graph.add_node("agent1_review_gate", agent1_review_gate_node)
     graph.add_node("resume_revision", resume_revision_node)
     graph.add_node("resume_revision_semantic_check", resume_revision_semantic_check_node)
     graph.add_node("resume_revision_repair", resume_revision_repair_node)
     graph.add_node("resume_revision_finalize", resume_revision_finalize_node)
+    graph.add_node("agent2_review_gate", agent2_review_gate_node)
     graph.add_node("final_output", final_output_node)
 
     graph.add_edge(START, "clean_inputs")
@@ -69,23 +77,25 @@ def build_resume_adjuster_graph() -> Any:
         "semantic_check",
         route_after_semantic_check,
         {
-            "resume_revision": "resume_revision",
+            "agent1_review_gate": "agent1_review_gate",
             "gap_analysis_repair": "gap_analysis_repair",
         },
     )
     graph.add_edge("gap_analysis_repair", "semantic_check")
+    graph.add_edge("agent1_review_gate", "resume_revision")
     graph.add_edge("resume_revision", "resume_revision_semantic_check")
     graph.add_conditional_edges(
         "resume_revision_semantic_check",
         route_after_resume_revision_semantic_check,
         {
-            "final_output": "final_output",
+            "agent2_review_gate": "agent2_review_gate",
             "resume_revision_repair": "resume_revision_repair",
             "resume_revision_finalize": "resume_revision_finalize",
         },
     )
     graph.add_edge("resume_revision_repair", "resume_revision_semantic_check")
-    graph.add_edge("resume_revision_finalize", "final_output")
+    graph.add_edge("resume_revision_finalize", "agent2_review_gate")
+    graph.add_edge("agent2_review_gate", "final_output")
     graph.add_edge("final_output", END)
 
     return graph.compile()

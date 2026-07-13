@@ -239,6 +239,41 @@ def _validate_inputs(
     return errors
 
 
+def _render_review_gate(review_gate) -> None:
+    """
+    Display a reviewer-gate verdict (scope/boundary check), if present.
+    """
+
+    if review_gate is None:
+        return
+
+    with st.expander("Scope & Safety Review", expanded=review_gate.verdict != "approved"):
+        if review_gate.verdict == "approved":
+            st.success("Approved: no scope or safety concerns detected.")
+        elif review_gate.verdict == "needs_human_review":
+            st.warning("Needs human review.")
+        else:
+            st.error("Blocked: scope or safety violation detected.")
+
+        if review_gate.blockers:
+            st.markdown("**Blockers:**")
+            for blocker in review_gate.blockers:
+                st.markdown(f"- {blocker}")
+
+        if review_gate.warnings:
+            st.markdown("**Warnings:**")
+            for warning in review_gate.warnings:
+                st.markdown(f"- {warning}")
+
+        if review_gate.human_review_reason:
+            st.caption(review_gate.human_review_reason)
+
+        if review_gate.policy_notes:
+            st.markdown("**Scope policy:**")
+            for note in review_gate.policy_notes:
+                st.markdown(f"- {note}")
+
+
 def _render_agent_1_output(final_result) -> None:
     """
     Display Agent 1 output.
@@ -257,6 +292,8 @@ def _render_agent_1_output(final_result) -> None:
     col2.metric("Requirements", len(gap_analysis.job_requirements))
     col3.metric("Gaps", len(gap_analysis.gaps))
 
+    _render_review_gate(final_result.agent1_review_gate)
+
     st.markdown(render_gap_analysis_summary(gap_analysis))
 
 
@@ -273,11 +310,21 @@ def _render_agent_2_output(final_result) -> None:
 
     resume_revision = final_result.resume_revision
 
+    if resume_revision.decision == "keep_already_strong":
+        st.success("Agent 2 decided to keep your resume unchanged: it's already strong for this role.")
+    elif resume_revision.decision == "keep_insufficient_fit":
+        st.warning(
+            "Agent 2 decided to keep your resume unchanged: there wasn't enough "
+            "truthful evidence to strengthen it for this role."
+        )
+
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Changes", len(resume_revision.changes))
     col2.metric("Keywords Added", len(resume_revision.added_keywords))
     col3.metric("Warnings", len(resume_revision.warnings))
     col4.metric("Confidence", f"{resume_revision.semantic_confidence}/100")
+
+    _render_review_gate(final_result.agent2_review_gate)
 
     st.markdown(render_change_summary(resume_revision))
 

@@ -16,6 +16,30 @@ class GapAnalystAgentError(Exception):
     """
 
 
+def _apply_deterministic_fit_score(result: GapAnalysisResult) -> GapAnalysisResult:
+    """
+    Replace the LLM's own freeform estimated_fit_score with a deterministic
+    score computed from the structured requirements/evidence/gaps it just
+    extracted, and carry the final score plus the fit summary down onto the
+    revision_brief so Agent 2 can see them without needing the raw job
+    description or full GapAnalysisResult.
+    """
+
+    computed_score = compute_fit_score(result)
+    updated_brief = result.revision_brief.model_copy(
+        update={
+            "estimated_fit_score": computed_score,
+            "overall_fit_summary": result.overall_fit_summary,
+        }
+    )
+    return result.model_copy(
+        update={
+            "estimated_fit_score": computed_score,
+            "revision_brief": updated_brief,
+        }
+    )
+
+
 class GapAnalystAgent:
     """
     Agent 1: Job-Resume Gap Analyst.
@@ -75,11 +99,7 @@ class GapAnalystAgent:
                     output_schema=GapAnalysisResult,
                 )
 
-            # The LLM's own estimated_fit_score is an ungrounded freeform guess;
-            # replace it with a deterministic score computed from the structured
-            # requirements/evidence/gaps it just extracted.
-            computed_score = compute_fit_score(result)
-            return result.model_copy(update={"estimated_fit_score": computed_score})
+            return _apply_deterministic_fit_score(result)
 
         except LLMClientError as exc:
             raise GapAnalystAgentError(
@@ -132,8 +152,7 @@ class GapAnalystAgent:
                     output_schema=GapAnalysisResult,
                 )
 
-            computed_score = compute_fit_score(result)
-            return result.model_copy(update={"estimated_fit_score": computed_score})
+            return _apply_deterministic_fit_score(result)
 
         except LLMClientError as exc:
             raise GapAnalystAgentError(

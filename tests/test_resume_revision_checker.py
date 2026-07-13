@@ -330,6 +330,140 @@ def test_finalize_drops_unsupported_coursework_evidence_with_warning() -> None:
     assert finalized.semantic_confidence == 100
 
 
+def test_keep_already_strong_unchanged_passes() -> None:
+    resume_revision = ResumeRevisionResult(
+        decision="keep_already_strong",
+        updated_resume_markdown=CURRENT_RESUME,
+        changes=[],
+        added_keywords=[],
+        removed_or_reduced_items=[],
+        evidence_used_from_coursework=[],
+        warnings=[],
+        revision_summary="The resume already fits this role well.",
+    )
+
+    check = run_resume_revision_semantic_check(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert check.passed is True
+    assert check.errors == []
+
+
+def test_keep_decision_with_reported_changes_fails() -> None:
+    resume_revision = _valid_resume_revision().model_copy(
+        update={"decision": "keep_already_strong"}
+    )
+
+    check = run_resume_revision_semantic_check(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert check.passed is False
+    assert any(
+        "keep_already_strong" in error and "changes were reported" in error
+        for error in check.errors
+    )
+
+
+def test_keep_decision_with_modified_markdown_fails() -> None:
+    resume_revision = ResumeRevisionResult(
+        decision="keep_insufficient_fit",
+        updated_resume_markdown=CURRENT_RESUME + "\n\nExtra unauthorized line.",
+        changes=[],
+        added_keywords=[],
+        removed_or_reduced_items=[],
+        evidence_used_from_coursework=[],
+        warnings=[],
+        revision_summary="Not enough evidence for this role.",
+    )
+
+    check = run_resume_revision_semantic_check(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert check.passed is False
+    assert any(
+        "keep_insufficient_fit" in error and "differs" in error
+        for error in check.errors
+    )
+
+
+def test_revise_decision_with_no_actual_change_fails() -> None:
+    resume_revision = ResumeRevisionResult(
+        decision="revise",
+        updated_resume_markdown=CURRENT_RESUME,
+        changes=[],
+        added_keywords=[],
+        removed_or_reduced_items=[],
+        evidence_used_from_coursework=[],
+        warnings=[],
+        revision_summary="Rewrote the whole resume.",
+    )
+
+    check = run_resume_revision_semantic_check(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert check.passed is False
+    assert any(
+        "'revise' but updated_resume_markdown is identical" in error
+        for error in check.errors
+    )
+
+
+def test_finalize_reverts_keep_decision_that_actually_changed_content() -> None:
+    resume_revision = _valid_resume_revision().model_copy(
+        update={"decision": "keep_already_strong"}
+    )
+
+    finalized = finalize_unsupported_resume_revision(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert finalized.decision == "keep_already_strong"
+    assert finalized.updated_resume_markdown == CURRENT_RESUME
+    assert finalized.changes == []
+    assert finalized.added_keywords == []
+    assert finalized.removed_or_reduced_items == []
+    assert any("Decision was" in warning for warning in finalized.semantic_warnings)
+
+
+def test_finalize_flips_no_op_revise_to_keep_already_strong() -> None:
+    resume_revision = ResumeRevisionResult(
+        decision="revise",
+        updated_resume_markdown=CURRENT_RESUME,
+        changes=[],
+        added_keywords=[],
+        removed_or_reduced_items=[],
+        evidence_used_from_coursework=[],
+        warnings=[],
+        revision_summary="Rewrote the whole resume.",
+    )
+
+    finalized = finalize_unsupported_resume_revision(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert finalized.decision == "keep_already_strong"
+    assert any(
+        "changed decision to 'keep_already_strong'" in warning
+        for warning in finalized.semantic_warnings
+    )
+
+
 def test_finalize_deduplicates_change_ids() -> None:
     resume_revision = _valid_resume_revision()
     changes = list(resume_revision.changes)
