@@ -17,6 +17,30 @@ class ResumeRevisionAgentError(Exception):
     """
 
 
+def _normalize_keep_decision(
+    result: ResumeRevisionResult, current_resume: str
+) -> ResumeRevisionResult:
+    """
+    Enforce a "keep" decision deterministically instead of trusting the LLM to
+    reproduce the resume byte-for-byte. The whole point of keep_already_strong
+    / keep_insufficient_fit is that nothing changes, so there's no need to ask
+    the LLM to prove that by copying the document exactly -- we already know
+    what the unchanged resume looks like.
+    """
+
+    if result.decision == "revise":
+        return result
+
+    return result.model_copy(
+        update={
+            "updated_resume_markdown": current_resume,
+            "changes": [],
+            "added_keywords": [],
+            "removed_or_reduced_items": [],
+        }
+    )
+
+
 class ResumeRevisionAgent:
     """
     Agent 2: Resume Revision Agent.
@@ -71,17 +95,19 @@ class ResumeRevisionAgent:
 
         try:
             if self.llm_client is not None:
-                return self.llm_client.invoke_structured(
+                result = self.llm_client.invoke_structured(
+                    system_prompt=RESUME_REVISION_SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    output_schema=ResumeRevisionResult,
+                )
+            else:
+                result = generate_structured_response(
                     system_prompt=RESUME_REVISION_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
                     output_schema=ResumeRevisionResult,
                 )
 
-            return generate_structured_response(
-                system_prompt=RESUME_REVISION_SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                output_schema=ResumeRevisionResult,
-            )
+            return _normalize_keep_decision(result, current_resume)
 
         except LLMClientError as exc:
             raise ResumeRevisionAgentError(
@@ -129,17 +155,19 @@ class ResumeRevisionAgent:
 
         try:
             if self.llm_client is not None:
-                return self.llm_client.invoke_structured(
+                result = self.llm_client.invoke_structured(
+                    system_prompt=RESUME_REVISION_SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    output_schema=ResumeRevisionResult,
+                )
+            else:
+                result = generate_structured_response(
                     system_prompt=RESUME_REVISION_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
                     output_schema=ResumeRevisionResult,
                 )
 
-            return generate_structured_response(
-                system_prompt=RESUME_REVISION_SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                output_schema=ResumeRevisionResult,
-            )
+            return _normalize_keep_decision(result, current_resume)
 
         except LLMClientError as exc:
             raise ResumeRevisionAgentError(

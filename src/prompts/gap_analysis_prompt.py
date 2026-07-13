@@ -36,6 +36,18 @@ GAP_ANALYSIS_SYSTEM_PROMPT = dedent(
     - The revision brief must be actionable enough for Agent 2 to use without
       reading the raw job description.
 
+    Verbatim quoting rule (strict):
+    - Every `text` field in matched_resume_evidence, low_relevance_items, and
+      revision_brief.resume_evidence_to_preserve must be copied
+      character-for-character from the current resume above. Do not paraphrase,
+      summarize, or combine sentences.
+    - A deterministic validator will reject any such quote it cannot find
+      verbatim (ignoring whitespace differences) in the current resume, so an
+      inexact quote is a hard failure, not a style issue.
+    - If no verbatim quote supports a point you want to make, either shorten the
+      quote to a substring that does appear in the resume, or leave that
+      evidence/item out.
+
     ID rules:
     - Use requirement IDs like REQ-001, REQ-002, REQ-003.
     - Use evidence IDs like EVID-001, EVID-002, EVID-003.
@@ -112,6 +124,8 @@ def build_gap_analysis_user_prompt(
         3. matched_resume_evidence
            - Identify resume content that already supports the job requirements.
            - Link evidence to requirement IDs.
+           - `text` must be copied character-for-character from the current
+             resume above -- a literal substring, not a paraphrase.
 
         4. gaps
            - Identify missing, weak, or unclear areas in the resume.
@@ -123,13 +137,17 @@ def build_gap_analysis_user_prompt(
            - Identify resume content that may be less relevant to this job.
            - Recommend whether it should be removed, shortened, moved lower, or
              kept only if space allows.
+           - `text` must be copied character-for-character from the current
+             resume above -- a literal substring, not a paraphrase.
 
         6. revision_brief
            - This is the structured handoff to Agent 2.
            - Include must-address requirement IDs.
            - Include keywords to include only if truthful.
            - Include gaps Agent 2 should try to address.
-           - Include evidence that should be preserved.
+           - Include evidence that should be preserved (resume_evidence_to_preserve
+             `text` must also be copied character-for-character from the current
+             resume above).
            - Include low-relevance items that may be reduced.
            - Include clear instructions for Agent 2.
 
@@ -202,8 +220,9 @@ def build_gap_analysis_repair_user_prompt(
         - Return a full, corrected GapAnalysisResult matching the schema, not a
           diff or partial update.
         - Every resume evidence text and low-relevance item text must be an
-          exact or near-exact quote that actually appears in the current
-          resume above.
+          exact verbatim quote -- a literal substring of the current resume
+          above, ignoring whitespace differences. Not a paraphrase, and not a
+          "near-exact" rewording; the validator checks for a literal match.
         - Every requirement_id you reference elsewhere must exist in your own
           job_requirements list.
         - Do not introduce duplicate requirement_id, evidence_id, gap_id, or
