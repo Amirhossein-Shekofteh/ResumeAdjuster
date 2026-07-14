@@ -1,0 +1,38 @@
+\documentclass[10pt]{article}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{parskip}
+
+\definecolor{accent}{HTML}{2A4D69}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{accent}}
+  {}{0em}{}
+  [\vspace{-0.4em}\titlerule]
+\titlespacing*{\section}{0pt}{1.1em}{0.5em}
+
+\setlist[itemize]{leftmargin=1.2em, itemsep=2pt, topsep=2pt}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+% pandoc emits \tightlist inside compact list items; its own default
+% templates define this macro, but a custom template must provide it too,
+% or compilation fails with "Undefined control sequence".
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries $title$}
+\end{center}
+\vspace{0.3em}
+
+$body$
+
+\end{document}

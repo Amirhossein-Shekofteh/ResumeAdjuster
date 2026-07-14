@@ -1,5 +1,11 @@
 # Workshop Task: "Updated Resume" Tab with LaTeX Preview + Word/PDF Download
 
+> **Superseded by [WORKSHOP_TASK_V2.md](WORKSHOP_TASK_V2.md) for this iteration.**
+> `resume_markdown.py`, `document_export.py`, and `templates/resume_template.tex` are
+> now implemented directly in this repo (with a fix for a header/margin bug this
+> version's design had), and the workshop is trimmed to two steps for the student. This
+> file is kept for reference but V2 is the current version to follow.
+
 ## Goal
 
 ResumeAdjuster already runs two agents (a gap analyst and a resume revision agent) and
