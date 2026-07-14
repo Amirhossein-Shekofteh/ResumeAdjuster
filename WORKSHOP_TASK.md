@@ -79,9 +79,178 @@ and substitutes it in place of `$body$`. The rest of the file is just styling �
 colored section-heading rule, tight list spacing, no page numbers, and comfortable
 margins, so the output reads like an actual resume rather than a raw article.
 
+This styling is entirely driven by pandoc emitting `\section`/`\subsection` commands,
+which only happens if the Markdown body it receives actually contains `#`/`##`
+headings. Resume text loaded from a file, or produced by the revision agent, is not
+guaranteed to have that structure — Step 2 makes sure it does before any resume text
+reaches pandoc.
+
 ---
 
-## Step 2 — Build `src/document_export.py`
+## Step 2 — Normalize resume Markdown (`src/resume_markdown.py`)
+
+**Why this step exists:** nothing upstream of this point guarantees the resume text is
+actually structured Markdown.
+
+- `src/document_loader.py`'s `load_txt`/`load_pdf`/`load_docx` all extract raw plain
+  text (`.strip()`ped file text, PDF `page.extract_text()`, DOCX `paragraph.text`) with
+  zero Markdown transformation — DOCX heading styles and bold runs are discarded
+  entirely, and no `#`/`##` syntax is ever inserted.
+- `data/sample_resume.txt` itself has no `#`/`##` characters — section titles like
+  "Education" and "Skills" are bare standalone lines.
+- The resume-revision prompts only ask the model to "produce a complete updated resume
+  in Markdown," with no requirement that section titles use `#`/`##` heading syntax.
+- When Agent 2's decision is `keep_already_strong` or `keep_insufficient_fit`,
+  `_normalize_keep_decision` in `src/agents/resume_revision_agent.py` deterministically
+  overwrites `updated_resume_markdown` with an exact copy of the raw, heading-less
+  `current_resume` string — so even the "no changes needed" path is guaranteed to have
+  zero heading structure.
+
+Put together: whatever text reaches pandoc (original resume, or updated resume whether
+LLM-revised or copied through unchanged) can easily have no `#`/`##` heading nodes for
+pandoc to turn into `\section`/`\subsection`. When that happens, the LaTeX template's
+colored heading rule and section spacing from Step 1 never fires — everything falls
+back to default paragraph flow, which is also why margins/spacing look off in the PDF,
+and the same flat, unstructured look shows up in the on-screen Before/After preview
+too, since it's rendered from the same unstructured text with `st.markdown()`.
+
+Create `src/resume_markdown.py`:
+
+```python
+from __future__ import annotations
+
+import re
+
+# Common resume section names we're willing to promote to Markdown `##`
+# headings when the source text has no heading syntax at all. Kept
+# deliberately narrow and curated -- a generic "any short standalone line is
+# a header" heuristic produces too many false positives on real resumes
+# (e.g. a one-line job title or company name would get promoted too).
+_KNOWN_SECTION_HEADINGS = {
+    "summary",
+    "objective",
+    "education",
+    "experience",
+    "work experience",
+    "professional experience",
+    "skills",
+    "technical skills",
+    "projects",
+    "certifications",
+    "awards",
+    "honors",
+    "honors and awards",
+    "campus involvement",
+    "extracurricular activities",
+    "publications",
+    "volunteer experience",
+    "leadership",
+    "languages",
+    "interests",
+    "references",
+    "activities",
+    "coursework",
+    "relevant coursework",
+}
+
+_BULLET_PATTERN = re.compile(r"^(\s*)[•*-]\s+")
+
+
+def _has_markdown_headings(text: str) -> bool:
+    return any(line.lstrip().startswith("#") for line in text.splitlines())
+
+
+def _normalize_bullets(text: str) -> str:
+    """
+    Normalize `•`, `*`, and `-` bullet markers to a consistent `- ` prefix.
+
+    pandoc only recognizes a bullet list when every item in a block uses the
+    same marker; resumes copy-pasted from Word/PDF often mix `•` characters
+    with `-`/`*`, which Markdown may not parse as a single list at all.
+    """
+
+    lines = text.splitlines()
+    normalized = [_BULLET_PATTERN.sub(r"\1- ", line) for line in lines]
+    return "\n".join(normalized)
+
+
+def normalize_resume_markdown(text: str) -> str:
+    """
+    Make sure resume text has real Markdown heading syntax before it reaches
+    pandoc or `st.markdown()`.
+
+    document_loader.py extracts plain text with no Markdown structure at all
+    (see load_txt/load_pdf/load_docx), and the revision agent is only asked
+    for "the full revised resume in Markdown" with no heading-syntax
+    requirement -- so the text handed to pandoc frequently has zero `#`/`##`
+    heading nodes. Without headings, pandoc emits plain paragraphs instead of
+    LaTeX \\section/\\subsection commands, so the resume template's colored
+    section rule and section spacing (see templates/resume_template.tex)
+    never fires, and both the on-screen preview and the PDF look flat.
+
+    This function is:
+    - Idempotent -- calling it twice, or calling it on text that already has
+      genuine heading syntax (from the agent or a hand-authored Markdown
+      resume), is a safe no-op for the heading structure.
+    - A DISPLAY/EXPORT-boundary concern only. It must never be applied to the
+      text that reaches Agent 1/Agent 2 or the deterministic checkers in
+      src/checks/resume_revision_checker.py -- that checker requires
+      evidence_source to be an exact substring of the raw current_resume /
+      coursework_student_info text, so normalizing that text before it
+      reaches the graph would silently break grounding checks.
+    """
+
+    text = text.strip()
+
+    if not text:
+        return text
+
+    if _has_markdown_headings(text):
+        return _normalize_bullets(text)
+
+    lines = text.splitlines()
+    promoted: list[str] = []
+    title_promoted = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not stripped:
+            promoted.append(line)
+            continue
+
+        if not title_promoted:
+            promoted.append(f"# {stripped}")
+            title_promoted = True
+            continue
+
+        if stripped.lower() in _KNOWN_SECTION_HEADINGS:
+            promoted.append(f"## {stripped}")
+            continue
+
+        promoted.append(line)
+
+    return _normalize_bullets("\n".join(promoted))
+```
+
+Notes:
+- The heading heuristic only ever looks at the *first* non-blank line (promoted to
+  `# title`) and lines that exactly match the curated section-name vocabulary
+  (case-insensitively, trimmed) — a job title like "Peer Tutor, Riverbend State
+  University Math Center" is never mistaken for a section heading.
+- `_has_markdown_headings` makes the whole function idempotent and safe on text that
+  already did the right thing (e.g. an agent that already returns `#`/`##` syntax): if
+  any line already starts with `#`, only bullets are normalized and headings are left
+  untouched.
+- This module has no Streamlit import and no custom error class — unlike
+  `document_export.py`/`document_loader.py`, there's no failure mode here; the function
+  always returns a string.
+- Where this gets called (and where it deliberately does **not** get called) is covered
+  in Step 3 and Step 4.
+
+---
+
+## Step 3 — Build `src/document_export.py`
 
 This module mirrors the style of `src/resume_renderer.py` and `src/document_loader.py`:
 plain functions, a dedicated error class, and no Streamlit imports (so it can be unit
@@ -96,6 +265,8 @@ import tempfile
 from pathlib import Path
 
 import pypandoc
+
+from src.resume_markdown import normalize_resume_markdown
 
 
 class DocumentExportError(RuntimeError):
@@ -137,12 +308,14 @@ def _convert_markdown(
 
     _require_binary("pandoc")
 
+    normalized_markdown = normalize_resume_markdown(markdown_text)
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_path = Path(tmp_dir) / f"resume.{to_format}"
 
         try:
             pypandoc.convert_text(
-                markdown_text,
+                normalized_markdown,
                 to=to_format,
                 format="md",
                 outputfile=str(output_path),
@@ -191,6 +364,12 @@ def markdown_content_hash(markdown_text: str) -> str:
 ```
 
 Notes:
+- `_convert_markdown` runs `markdown_text` through `normalize_resume_markdown` (Step 2)
+  before handing anything to pandoc. This is the one place both `render_resume_pdf` and
+  `render_resume_docx` funnel through, so it's what guarantees the template's
+  `\section`/`\subsection` styling actually fires — even when the resume text came from
+  a plain-text loader, or from `_normalize_keep_decision` copying the original resume
+  through unchanged.
 - `render_resume_pdf` passes `--template` (our file from Step 1) and
   `--pdf-engine=tectonic` so pandoc drives the whole Markdown → LaTeX → PDF pipeline.
 - `render_resume_docx` needs no template — pandoc's built-in Markdown → DOCX conversion
@@ -201,15 +380,17 @@ Notes:
   `_convert_markdown` (checks `pandoc`); `render_resume_pdf` additionally checks
   `tectonic` up front, since that's the actual PDF engine and pandoc alone can't tell you
   it's missing until compilation is already underway.
-- `markdown_content_hash` will be used in Step 3 to avoid re-running the (relatively
+- `markdown_content_hash` will be used in Step 4 to avoid re-running the (relatively
   slow) LaTeX compilation on every Streamlit rerun when the resume content hasn't
-  changed.
+  changed. It hashes the raw (pre-normalization) text, which is fine — normalization is
+  a pure function of that text, so the cache key still changes exactly when the actual
+  content changes.
 
 ---
 
-## Step 3 — Wire the tab into `app.py`
+## Step 4 — Wire the tab into `app.py`
 
-### 3a. Update imports
+### 4a. Update imports
 
 At the top of `app.py`, add:
 
@@ -226,9 +407,10 @@ from src.document_export import (
     render_resume_docx,
     render_resume_pdf,
 )
+from src.resume_markdown import normalize_resume_markdown
 ```
 
-### 3b. Replace `_render_updated_resume`
+### 4b. Replace `_render_updated_resume`
 
 Find `_render_updated_resume` in `app.py` (around line 332) and replace it entirely with:
 
@@ -251,11 +433,15 @@ def _render_updated_resume_tab(final_result, original_resume: str) -> None:
 
     with col_before:
         st.markdown("**Original Resume**")
-        st.markdown(original_resume or "_No original resume text available._")
+        st.markdown(
+            normalize_resume_markdown(original_resume)
+            if original_resume
+            else "_No original resume text available._"
+        )
 
     with col_after:
         st.markdown("**Updated Resume**")
-        st.markdown(updated_resume)
+        st.markdown(normalize_resume_markdown(updated_resume))
 
     st.download_button(
         label="Download updated resume as Markdown",
@@ -316,6 +502,18 @@ def _render_updated_resume_tab(final_result, original_resume: str) -> None:
         )
 ```
 
+Why `normalize_resume_markdown` is called here, not earlier: `updated_resume` (from
+`render_updated_resume`) and `original_resume` are exactly the raw text produced by the
+revision agent / loaded from the uploaded file — the same raw values used for the
+"Download updated resume as Markdown" button, the cache key below, and the export calls
+in Step 3. `normalize_resume_markdown` is applied only at the point each value is
+actually rendered (`st.markdown(...)`) or handed to pandoc (Step 3) — it's never
+assigned back into `updated_resume`/`original_resume`, and it never reaches Agent 1,
+Agent 2, or the checkers in `src/checks/resume_revision_checker.py`. That checker
+requires every `evidence_source` to be an exact substring of the raw resume text, so
+normalizing that text upstream of the agents would silently break grounding checks. See
+Step 2 for the full rationale.
+
 Why cache in `st.session_state` keyed by a content hash: Streamlit reruns the entire
 script on every interaction (e.g. clicking a download button). Without caching, opening
 the tab or clicking a download button would silently re-run the LaTeX compilation every
@@ -329,7 +527,7 @@ after `run_resume_adjuster(...)` is called) instead of keeping it local to the
 Streamlit rerun too, and without that persistence the whole results section — not just
 the LaTeX preview — would disappear on that rerun.
 
-### 3c. Add the 4th tab, first
+### 4c. Add the 4th tab, first
 
 Find the tab block in `main()` (around line 503) and change it from 3 tabs to 4. Put
 **"Updated Resume" first**: for a non-technical user, the final revised resume is the
@@ -364,12 +562,12 @@ with tab4:
 `source_resume_text` is set alongside `final_result` in `main()`'s
 `st.session_state["final_result"] = final_result` line — it's the resume text that was
 actually used to produce this `final_result`, so the "Before" side of the Before/After
-view in Step 3b stays correct even if the user edits the resume text area afterward
+view in Step 4b stays correct even if the user edits the resume text area afterward
 without regenerating.
 
 ---
 
-## Step 4 — Tests
+## Step 5 — Tests
 
 Create `tests/test_document_export.py`, following the style of
 `tests/test_resume_renderer.py` and `tests/test_document_loader.py`. The mocked tests
@@ -467,6 +665,98 @@ def test_render_resume_docx_end_to_end_produces_valid_docx() -> None:
     docx_bytes = render_resume_docx("# Jordan Lee\n\n## Skills\n\n- Python\n- SQL")
 
     assert docx_bytes[:4] == b"PK\x03\x04"
+
+
+def test_render_resume_pdf_normalizes_headingless_markdown_before_pandoc() -> None:
+    """Confirms Step 2's normalize_resume_markdown is actually wired into export."""
+
+    received: dict[str, str] = {}
+
+    def fake_convert(text, to, format, outputfile, extra_args):
+        received["text"] = text
+        with open(outputfile, "wb") as handle:
+            handle.write(b"%PDF-fake")
+
+    with _patch_which_present(), patch(
+        "src.document_export.pypandoc.convert_text", side_effect=fake_convert
+    ):
+        render_resume_pdf("Jordan Lee\n\nSkills\n- Python\n- SQL")
+
+    assert received["text"].startswith("# Jordan Lee")
+    assert "## Skills" in received["text"]
+```
+
+Also create `tests/test_resume_markdown.py`:
+
+```python
+from __future__ import annotations
+
+from src.resume_markdown import normalize_resume_markdown
+
+
+def test_promotes_first_line_to_title_and_known_sections_to_headings() -> None:
+    raw = (
+        "Jordan Lee\n"
+        "jordan.lee@example.edu\n"
+        "\n"
+        "Education\n"
+        "B.S. in Data Science\n"
+        "\n"
+        "Skills\n"
+        "- Python\n"
+        "- SQL\n"
+    )
+
+    normalized = normalize_resume_markdown(raw)
+
+    assert normalized.startswith("# Jordan Lee")
+    assert "## Education" in normalized
+    assert "## Skills" in normalized
+
+
+def test_leaves_already_markdown_text_unchanged() -> None:
+    raw = "# Jordan Lee\n\n## Skills\n\n- Python\n- SQL"
+
+    assert normalize_resume_markdown(raw) == raw
+
+
+def test_is_idempotent() -> None:
+    raw = "Jordan Lee\n\nEducation\nB.S. in Data Science\n\nSkills\n- Python\n"
+
+    once = normalize_resume_markdown(raw)
+    twice = normalize_resume_markdown(once)
+
+    assert once == twice
+
+
+def test_does_not_promote_non_section_lines() -> None:
+    raw = (
+        "Jordan Lee\n"
+        "Peer Tutor, Riverbend State University Math Center\n"
+        "\n"
+        "Skills\n"
+        "- Python\n"
+    )
+
+    normalized = normalize_resume_markdown(raw)
+
+    assert "## Peer Tutor" not in normalized
+    assert "Peer Tutor, Riverbend State University Math Center" in normalized
+
+
+def test_normalizes_bullet_markers() -> None:
+    raw = "Skills\n* Python\n• SQL\n- Excel\n"
+
+    normalized = normalize_resume_markdown(raw)
+
+    assert "- Python" in normalized
+    assert "- SQL" in normalized
+    assert "- Excel" in normalized
+
+
+def test_empty_input_returns_empty_string() -> None:
+    assert normalize_resume_markdown("") == ""
+    assert normalize_resume_markdown("   \n  ") == ""
 ```
 
 ---
@@ -489,7 +779,13 @@ def test_render_resume_docx_end_to_end_produces_valid_docx() -> None:
 - [ ] **Download as PDF** produces a file that opens correctly and matches the preview.
 - [ ] Clicking a download button does *not* re-trigger LaTeX compilation (no spinner) —
       confirms the session-state cache is working.
-- [ ] `pytest` passes, including the 6 tests in `tests/test_document_export.py`.
+- [ ] Section titles (Education, Skills, Experience, ...) render as real headings — bold
+      colored text with the template's heading rule and spacing — in both Before/After
+      Markdown preview panes and in the generated PDF, not as plain paragraph text
+      running together with the rest of the resume.
+- [ ] `pytest` passes, including the 7 tests in `tests/test_document_export.py` (6
+      original + 1 covering the new normalization wiring) and the 6 tests in
+      `tests/test_resume_markdown.py`.
 
 ---
 
