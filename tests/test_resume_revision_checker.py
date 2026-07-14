@@ -34,7 +34,7 @@ def _valid_resume_revision() -> ResumeRevisionResult:
                 before="Worked on class project.",
                 after="Built a Python project for analyzing student survey data.",
                 reason="More specific and aligned with the target role.",
-                evidence_source="Original resume.",
+                evidence_source="Built a Python project for analyzing student survey data.",
             ),
             ResumeChange(
                 change_id="CHG-002",
@@ -116,6 +116,71 @@ def test_empty_evidence_source_on_rewrite_fails() -> None:
 
     assert check.passed is False
     assert any("CHG-001" in error and "unverifiable" in error for error in check.errors)
+
+
+def test_evidence_source_label_instead_of_quote_fails_even_if_after_is_present() -> None:
+    """
+    A change whose `after` text is genuinely present in the resume must still
+    fail if evidence_source is a category label (e.g. "coursework info")
+    rather than a real quote from the source documents -- this is the hole
+    that let fabricated-but-plausible-sounding bullets pass validation.
+    """
+
+    resume_revision = _valid_resume_revision()
+    changes = list(resume_revision.changes)
+    changes.append(
+        ResumeChange(
+            change_id="CHG-005",
+            change_type="add",
+            resume_section="Skills",
+            before=None,
+            after="Python",
+            reason="Highlights a relevant technical skill.",
+            evidence_source="Relevant technical background.",
+        )
+    )
+    resume_revision = resume_revision.model_copy(update={"changes": changes})
+
+    check = run_resume_revision_semantic_check(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert check.passed is False
+    assert any("CHG-005" in error and "unverifiable" in error for error in check.errors)
+
+
+def test_evidence_source_grounded_in_coursework_passes() -> None:
+    resume_revision = _valid_resume_revision()
+    changes = list(resume_revision.changes)
+    changes.append(
+        ResumeChange(
+            change_id="CHG-005",
+            change_type="add",
+            resume_section="Skills",
+            before=None,
+            after="Completed a Data Structures course.",
+            reason="Adds relevant coursework.",
+            evidence_source="Completed a Data Structures course.",
+        )
+    )
+    resume_revision = resume_revision.model_copy(
+        update={
+            "changes": changes,
+            "updated_resume_markdown": UPDATED_RESUME_MARKDOWN
+            + "\n- Completed a Data Structures course.",
+        }
+    )
+
+    check = run_resume_revision_semantic_check(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert check.passed is True
+    assert check.errors == []
 
 
 def test_incomplete_removal_fails() -> None:
@@ -460,6 +525,54 @@ def test_finalize_flips_no_op_revise_to_keep_already_strong() -> None:
     assert finalized.decision == "keep_already_strong"
     assert any(
         "changed decision to 'keep_already_strong'" in warning
+        for warning in finalized.semantic_warnings
+    )
+
+
+def test_finalize_relabels_revise_as_insufficient_fit_when_evidence_fails() -> None:
+    """
+    When every proposed change fails truthfulness verification (fabricated
+    evidence_source), finalize must not silently ship the stripped-down
+    resume as a "revise", nor mislabel it "keep_already_strong" (which would
+    imply the resume was already fine) -- it should say plainly that there
+    wasn't enough truthful evidence to strengthen it.
+    """
+
+    fabricated_claim = (
+        "Extensive Python expertise architecting large-scale production systems."
+    )
+    resume_revision = ResumeRevisionResult(
+        decision="revise",
+        updated_resume_markdown=CURRENT_RESUME + " " + fabricated_claim,
+        changes=[
+            ResumeChange(
+                change_id="CHG-001",
+                change_type="add",
+                resume_section="Skills",
+                before=None,
+                after=fabricated_claim,
+                reason="Highlights strong Python skills.",
+                evidence_source="Demonstrated strong technical ability.",
+            )
+        ],
+        added_keywords=[],
+        removed_or_reduced_items=[],
+        evidence_used_from_coursework=[],
+        warnings=[],
+        revision_summary="Added emphasis on Python expertise.",
+    )
+
+    finalized = finalize_unsupported_resume_revision(
+        resume_revision=resume_revision,
+        current_resume=CURRENT_RESUME,
+        coursework_student_info=COURSEWORK_STUDENT_INFO,
+    )
+
+    assert finalized.decision == "keep_insufficient_fit"
+    assert fabricated_claim not in finalized.updated_resume_markdown
+    assert finalized.revision_summary.startswith("Automated note:")
+    assert any(
+        "keep_insufficient_fit" in warning and "verification" in warning
         for warning in finalized.semantic_warnings
     )
 

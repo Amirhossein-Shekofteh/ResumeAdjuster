@@ -91,11 +91,18 @@ def _find_duplicate_change_ids(changes: list[ResumeChange]) -> set[str]:
 def _find_unverifiable_changes(
     changes: list[ResumeChange],
     updated_resume_markdown: str,
+    current_resume: str,
+    coursework_student_info: str,
 ) -> list[ResumeChange]:
     """
-    add/rewrite changes with an empty evidence_source, or whose `after` text
-    can't be found in the final resume -- Agent 2's own report doesn't match
-    reality, so the claim can't be verified.
+    add/rewrite changes with an empty or ungrounded evidence_source, or whose
+    `after` text can't be found in the final resume -- Agent 2's own report
+    doesn't match reality, so the claim can't be verified.
+
+    evidence_source must be an exact quote actually present in the current
+    resume or the coursework/student background information, not just a
+    non-empty category label -- a label like "coursework info" would let a
+    fabricated bullet pass every other check.
     """
 
     unverifiable: list[ResumeChange] = []
@@ -104,12 +111,16 @@ def _find_unverifiable_changes(
         if not _is_add_or_rewrite(change):
             continue
 
-        missing_evidence_source = not change.evidence_source.strip()
+        evidence_source = change.evidence_source.strip()
+        evidence_ungrounded = not evidence_source or not (
+            _is_present(evidence_source, current_resume)
+            or _is_present(evidence_source, coursework_student_info)
+        )
         after_not_found = change.after is not None and not _is_present(
             change.after, updated_resume_markdown
         )
 
-        if missing_evidence_source or after_not_found:
+        if evidence_ungrounded or after_not_found:
             unverifiable.append(change)
 
     return unverifiable
@@ -252,8 +263,10 @@ def run_resume_revision_semantic_check(
     Rules:
     1. updated_resume_markdown and revision_summary must not be empty.
     2. change_id must be unique.
-    3. Every add/rewrite change must have a non-empty evidence_source, and
-       its `after` text must actually appear in updated_resume_markdown.
+    3. Every add/rewrite change must have an evidence_source that is a
+       verbatim quote found in the current resume or the coursework/student
+       background information, and its `after` text must actually appear in
+       updated_resume_markdown.
     4. Every remove change's `before` text must no longer appear in
        updated_resume_markdown.
     5. Every added_keywords entry must appear in updated_resume_markdown,
@@ -296,14 +309,17 @@ def run_resume_revision_semantic_check(
     add_rewrite_changes = [
         change for change in resume_revision.changes if _is_add_or_rewrite(change)
     ]
-    unverifiable_changes = _find_unverifiable_changes(resume_revision.changes, markdown)
+    unverifiable_changes = _find_unverifiable_changes(
+        resume_revision.changes, markdown, current_resume, coursework_student_info
+    )
     total_checks += len(add_rewrite_changes)
     failed_checks += len(unverifiable_changes)
     for change in unverifiable_changes:
         errors.append(
-            f"Change {change.change_id} is unverifiable: either its evidence_source "
-            f"is empty, or its `after` text was not found in updated_resume_markdown "
-            f"({change.after!r})."
+            f"Change {change.change_id} is unverifiable: its evidence_source "
+            f"({change.evidence_source!r}) is not a verbatim quote found in the "
+            "current resume or coursework/student background information, or its "
+            f"`after` text was not found in updated_resume_markdown ({change.after!r})."
         )
 
     # 4. remove changes must actually be gone.
@@ -464,7 +480,10 @@ def finalize_unsupported_resume_revision(
     # that only became unverifiable because its keyword was just stripped is
     # still caught and reconciled here.
     unverifiable_ids = {
-        change.change_id for change in _find_unverifiable_changes(changes, markdown)
+        change.change_id
+        for change in _find_unverifiable_changes(
+            changes, markdown, current_resume, coursework_student_info
+        )
     }
     updated_changes: list[ResumeChange] = []
     for change in changes:
@@ -509,6 +528,14 @@ def finalize_unsupported_resume_revision(
     decision = resume_revision.decision
     removed_or_reduced_items = list(resume_revision.removed_or_reduced_items)
     markdown_unchanged = _normalize(markdown) == _normalize(current_resume)
+    revision_summary = resume_revision.revision_summary
+
+    # Was anything actually stripped above for failing truthfulness
+    # verification (as opposed to the resume ending up unchanged simply
+    # because Agent 2 never proposed anything, or only "keep" no-ops)? This
+    # is the real signal that the revision failed for lack of evidence, not
+    # just that the resulting markdown happens to match the original.
+    stripped_for_unverifiability = bool(unverifiable_ids) or bool(unsupported_keywords)
 
     if decision != "revise":
         has_reported_changes = bool(changes) or bool(added_keywords) or bool(
@@ -524,6 +551,18 @@ def finalize_unsupported_resume_revision(
                 "reverted updated_resume_markdown to the original resume and "
                 "cleared all reported changes for safety."
             )
+    elif markdown_unchanged and stripped_for_unverifiability:
+        decision = "keep_insufficient_fit"
+        revision_summary = (
+            "Automated note: the proposed changes could not be verified against "
+            "truthful evidence, so this resume was left unchanged. "
+            + revision_summary
+        )
+        finalize_notes.append(
+            "Decision was 'revise' but every proposed change failed truthfulness "
+            "verification; changed decision to 'keep_insufficient_fit' because no "
+            "verifiable evidence supported strengthening this resume for the role."
+        )
     elif not changes and markdown_unchanged:
         decision = "keep_already_strong"
         finalize_notes.append(
@@ -539,6 +578,7 @@ def finalize_unsupported_resume_revision(
             "added_keywords": added_keywords,
             "removed_or_reduced_items": removed_or_reduced_items,
             "evidence_used_from_coursework": evidence_used_from_coursework,
+            "revision_summary": revision_summary,
         }
     )
 

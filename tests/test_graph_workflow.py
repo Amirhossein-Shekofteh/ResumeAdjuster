@@ -83,7 +83,7 @@ def _sample_resume_revision_result() -> ResumeRevisionResult:
                 before="Worked on class project.",
                 after="Built a Python project to analyze student survey data.",
                 reason="The revised bullet is more specific and aligned with the revision brief.",
-                evidence_source="Original resume and coursework/student background information.",
+                evidence_source="Built a Python project for analyzing student survey data.",
             )
         ],
         added_keywords=["Python", "Data Analysis"],

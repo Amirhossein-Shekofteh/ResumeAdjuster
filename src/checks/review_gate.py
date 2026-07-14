@@ -20,6 +20,24 @@ _PROMPT_INJECTION_PATTERNS = [
     r"forget\s+your\s+instructions",
 ]
 
+# Narrower subset of the patterns above, used only to scan an agent's OWN
+# generated output (RevisionBrief text, Agent 2's resume/summary/warnings) for
+# leaked/laundered instructions. Deliberately excludes generic truthfulness
+# vocabulary ("fabricate", "make up", "add fake") that the agents are
+# explicitly prompted to use when explaining a truthful refusal to fabricate
+# content (see resume_revision_prompt.py) -- matching on that vocabulary here
+# produced false-positive blockers on honest output.
+_INSTRUCTION_HIJACK_PATTERNS = [
+    r"ignore\s+(all\s+)?previous\s+instructions",
+    r"disregard\s+(all\s+)?previous\s+instructions",
+    r"reveal\s+(the\s+)?system\s+prompt",
+    r"developer\s+message",
+    r"system\s+message",
+    r"pretend\s+I\s+have",
+    r"you\s+are\s+now",
+    r"forget\s+your\s+instructions",
+]
+
 _OUT_OF_SCOPE_EVIDENCE_SOURCE_PATTERNS = [
     r"job\s+description",
     r"job\s+posting",
@@ -46,6 +64,10 @@ def _contains_any(text: str | None, patterns: list[str]) -> bool:
 
 def _contains_prompt_injection_like_text(text: str | None) -> bool:
     return _contains_any(text, _PROMPT_INJECTION_PATTERNS)
+
+
+def _contains_instruction_hijack_text(text: str | None) -> bool:
+    return _contains_any(text, _INSTRUCTION_HIJACK_PATTERNS)
 
 
 def _finalize_review(
@@ -120,10 +142,10 @@ def run_agent1_review_gate(
     if revision_brief is None:
         blockers.append("Agent 1 did not produce a RevisionBrief for Agent 2.")
     else:
-        if _contains_prompt_injection_like_text(
+        if _contains_instruction_hijack_text(
             revision_brief.target_role_summary
         ) or any(
-            _contains_prompt_injection_like_text(instruction)
+            _contains_instruction_hijack_text(instruction)
             for instruction in revision_brief.instructions_for_revision_agent
         ):
             blockers.append(
@@ -223,7 +245,7 @@ def run_agent2_review_gate(
         *(change.reason for change in resume_revision.changes),
     ]
 
-    if any(_contains_prompt_injection_like_text(text) for text in own_output_texts):
+    if any(_contains_instruction_hijack_text(text) for text in own_output_texts):
         blockers.append(
             "The resume revision contains prompt-injection-like language. This "
             "suggests source instructions may have leaked into the output."

@@ -76,6 +76,16 @@ RESUME_REVISION_SYSTEM_PROMPT = dedent(
       certifications.
     - Do not add a keyword unless it is supported by the original resume or the
       coursework/student background information.
+    - Every add/rewrite change's evidence_source must be an exact, verbatim quote
+      copied from the current resume or the coursework/student background
+      information -- never a category label like "original resume" or
+      "coursework info". A deterministic validator checks that this exact text
+      appears in one of those two source texts, so a label instead of a real
+      quote will be rejected as unverifiable.
+    - If you cannot find a genuine verbatim quote to justify a proposed change,
+      do not make that change. If dropping every change that lacks real
+      evidence leaves nothing meaningful to revise, set decision to
+      "keep_insufficient_fit" instead of keeping a weakly-supported change.
     - If a gap cannot be filled truthfully, include it as a warning instead of
       hiding it.
 
@@ -202,6 +212,11 @@ def build_resume_revision_user_prompt(
            - List each meaningful change (change_type: add, remove, rewrite, or
              reorder). Include what changed, where it changed, why it changed,
              and what evidence supports it.
+           - For every add/rewrite change, evidence_source must be an exact,
+             verbatim quote copied from the current resume or the coursework/
+             student background information above -- not a category label. If
+             you cannot copy a real quote that truthfully supports the change,
+             drop the change instead of inventing a label for it.
            - Also list the major resume sections/bullets you deliberately kept
              unchanged, as changes with change_type "keep" (before and after
              identical, reason explaining why it was already strong). Together
@@ -243,6 +258,15 @@ def build_resume_revision_user_prompt(
           information, and will reject any added_keywords entry it cannot
           find in updated_resume_markdown. Only claim a keyword was added if
           it is truthfully supported and actually present in the final resume.
+        - The same validator will check every add/rewrite change's
+          evidence_source against the current resume and coursework/student
+          background information, and will reject it if that text is not an
+          exact quote found in one of those two sources. If you cannot produce
+          a real quote, do not make that change.
+        - If, after dropping every change that lacks a real supporting quote,
+          nothing meaningful remains to revise, set decision to
+          "keep_insufficient_fit" and explain why in revision_summary instead
+          of shipping unsupported changes.
         """
     ).strip()
 
@@ -315,7 +339,12 @@ def build_resume_revision_repair_user_prompt(
           what the output actually contains, fix whichever one is wrong so
           they agree.
         - Every add/rewrite change's `after` text must actually appear in
-          updated_resume_markdown, and must have a non-empty evidence_source.
+          updated_resume_markdown, and its evidence_source must be an exact,
+          verbatim quote copied from the current resume or the coursework/
+          student background information above -- not a category label like
+          "original resume" or "coursework info". If you cannot copy a real
+          quote that truthfully supports a change, remove that change rather
+          than inventing a label for it.
         - Every remove change's `before` text must no longer appear anywhere
           in updated_resume_markdown.
         - Every added_keywords entry must actually appear in
@@ -326,6 +355,12 @@ def build_resume_revision_repair_user_prompt(
         - Every evidence_used_from_coursework entry must be genuinely found in
           the coursework/student background information above.
         - Do not introduce duplicate change_id values.
+        - If removing every change that lacks a real supporting quote leaves
+          nothing meaningful to revise, switch decision to
+          "keep_insufficient_fit", set updated_resume_markdown back to the
+          original current resume, clear changes/added_keywords/
+          removed_or_reduced_items, and explain why in revision_summary --
+          do not keep a "revise" decision propped up by unverifiable evidence.
         - Preserve everything from your previous output that was already
           correct; only change what is needed to fix the validation errors.
         """

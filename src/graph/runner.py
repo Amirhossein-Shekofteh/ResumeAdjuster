@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from src.graph.builder import build_resume_adjuster_graph
 from src.graph.state import ResumeAdjusterState, build_initial_state
@@ -52,6 +52,27 @@ def _coerce_final_output(value: Any) -> FinalWorkflowResult | None:
     )
 
 
+def _finalize_result_state(result_state: ResumeAdjusterState) -> FinalWorkflowResult:
+    """
+    Convert a completed graph state into a FinalWorkflowResult.
+    """
+
+    final_output = _coerce_final_output(result_state.get("final_output"))
+
+    if final_output is not None:
+        return final_output
+
+    return FinalWorkflowResult(
+        success=False,
+        gap_analysis=result_state.get("gap_analysis"),
+        resume_revision=result_state.get("resume_revision"),
+        final_resume_markdown=result_state.get("final_resume_markdown"),
+        agent_trace=list(result_state.get("agent_trace") or []),
+        errors=list(result_state.get("errors") or [])
+        + ["Workflow completed without producing final_output."],
+    )
+
+
 def run_resume_adjuster(
     job_description: str,
     current_resume: str,
@@ -75,20 +96,41 @@ def run_resume_adjuster(
         graph = build_resume_adjuster_graph()
         result_state: ResumeAdjusterState = graph.invoke(initial_state)
 
-        final_output = _coerce_final_output(result_state.get("final_output"))
-
-        if final_output is not None:
-            return final_output
-
-        return FinalWorkflowResult(
-            success=False,
-            gap_analysis=result_state.get("gap_analysis"),
-            resume_revision=result_state.get("resume_revision"),
-            final_resume_markdown=result_state.get("final_resume_markdown"),
-            agent_trace=list(result_state.get("agent_trace") or []),
-            errors=list(result_state.get("errors") or [])
-            + ["Workflow completed without producing final_output."],
-        )
+        return _finalize_result_state(result_state)
 
     except Exception as exc:
         return _fallback_error_result(f"ResumeAdjuster workflow failed: {exc}")
+
+
+def stream_resume_adjuster(
+    job_description: str,
+    current_resume: str,
+    coursework_student_info: str,
+    llm_client: LLMClient | None = None,
+) -> Iterator[list[AgentTraceStep] | FinalWorkflowResult]:
+    """
+    Run the full ResumeAdjuster graph, yielding the growing agent_trace after
+    each node completes, then yielding the final FinalWorkflowResult.
+
+    This is what app.py should call to show a live, node-level progress
+    tracker while the workflow is running.
+    """
+
+    initial_state = build_initial_state(
+        job_description=job_description,
+        current_resume=current_resume,
+        coursework_student_info=coursework_student_info,
+        llm_client=llm_client,
+    )
+
+    try:
+        graph = build_resume_adjuster_graph()
+        result_state: ResumeAdjusterState = initial_state
+
+        for result_state in graph.stream(initial_state, stream_mode="values"):
+            yield list(result_state.get("agent_trace") or [])
+
+        yield _finalize_result_state(result_state)
+
+    except Exception as exc:
+        yield _fallback_error_result(f"ResumeAdjuster workflow failed: {exc}")

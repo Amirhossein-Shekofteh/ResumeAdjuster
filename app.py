@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
 from src.config import CONFIG
 from src.document_loader import DocumentLoadingError, load_document
-from src.graph.runner import run_resume_adjuster
+from src.graph.runner import stream_resume_adjuster
 from src.llm_client import LLMClient
 from src.resume_renderer import (
     render_change_summary,
@@ -15,7 +15,7 @@ from src.resume_renderer import (
     render_gap_analysis_summary,
     render_updated_resume,
 )
-from src.utils.logging_utils import trace_to_rows
+from src.schemas import AgentTraceStep, FinalWorkflowResult
 
 
 APP_TITLE = "ResumeAdjuster"
@@ -324,6 +324,14 @@ def _render_agent_2_output(final_result) -> None:
     col3.metric("Warnings", len(resume_revision.warnings))
     col4.metric("Confidence", f"{resume_revision.semantic_confidence}/100")
 
+    if resume_revision.semantic_warnings:
+        with st.expander(
+            "Truthfulness & Consistency Warnings",
+            expanded=resume_revision.semantic_confidence < 100,
+        ):
+            for warning in resume_revision.semantic_warnings:
+                st.markdown(f"- {warning}")
+
     _render_review_gate(final_result.agent2_review_gate)
 
     st.markdown(render_change_summary(resume_revision))
@@ -350,21 +358,149 @@ def _render_updated_resume(final_result) -> None:
     )
 
 
+_STEP_STATUS_STYLE = {
+    "success": {"icon": "&#9989;", "color": "#22c55e", "label": "Success"},
+    "warning": {"icon": "&#9888;&#65039;", "color": "#f59e0b", "label": "Warning"},
+    "error": {"icon": "&#10060;", "color": "#ef4444", "label": "Error"},
+}
+
+
+def _build_stepper_html(agent_trace: list[AgentTraceStep]) -> str | None:
+    """
+    Build the HTML for a vertical, node-level progress stepper from an
+    agent_trace. Returns None if there are no steps yet.
+    """
+
+    if not agent_trace:
+        return None
+
+    steps_html: list[str] = []
+
+    for index, step in enumerate(agent_trace):
+        style = _STEP_STATUS_STYLE.get(
+            step.status, {"icon": "&#8226;", "color": "#94a3b8", "label": step.status}
+        )
+        is_last = index == len(agent_trace) - 1
+        agent_label = html.escape(step.agent_name or "Workflow node")
+        step_title = html.escape(f"Step {step.step_number}: {step.step_name}")
+        input_summary = html.escape(step.input_summary)
+        output_summary = html.escape(step.output_summary)
+
+        steps_html.append(
+            f"""
+            <div class="ra-step{'' if not is_last else ' ra-step-last'}">
+                <div class="ra-step-marker">
+                    <span class="ra-step-icon" style="background:{style['color']}">{style['icon']}</span>
+                    {'' if is_last else '<span class="ra-step-line"></span>'}
+                </div>
+                <div class="ra-step-body">
+                    <div class="ra-step-header">
+                        <span class="ra-step-title">{step_title}</span>
+                        <span class="ra-step-agent">{agent_label}</span>
+                        <span class="ra-step-status" style="color:{style['color']}">{style['label']}</span>
+                    </div>
+                    <div class="ra-step-summary"><strong>In:</strong> {input_summary}</div>
+                    <div class="ra-step-summary"><strong>Out:</strong> {output_summary}</div>
+                </div>
+            </div>
+            """
+        )
+
+    stepper_html = f"""
+    <style>
+    .ra-stepper {{
+        display: flex;
+        flex-direction: column;
+    }}
+    .ra-step {{
+        display: flex;
+        gap: 0.75rem;
+    }}
+    .ra-step-marker {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+    }}
+    .ra-step-icon {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 50%;
+        font-size: 0.9rem;
+        color: white;
+    }}
+    .ra-step-line {{
+        flex: 1;
+        width: 2px;
+        min-height: 1.5rem;
+        background: rgba(128, 128, 128, 0.35);
+        margin: 0.15rem 0;
+    }}
+    .ra-step-body {{
+        flex: 1;
+        padding-bottom: 1.25rem;
+    }}
+    .ra-step-last .ra-step-body {{
+        padding-bottom: 0;
+    }}
+    .ra-step-header {{
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+    }}
+    .ra-step-title {{
+        font-weight: 600;
+        color: var(--text-color);
+    }}
+    .ra-step-agent {{
+        font-size: 0.75rem;
+        padding: 0.05rem 0.5rem;
+        border-radius: 999px;
+        background: rgba(128, 128, 128, 0.2);
+        color: var(--text-color);
+    }}
+    .ra-step-status {{
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }}
+    .ra-step-summary {{
+        font-size: 0.85rem;
+        color: var(--text-color);
+        opacity: 0.75;
+        margin: 0.1rem 0;
+    }}
+    </style>
+    <div class="ra-stepper">
+        {''.join(steps_html)}
+    </div>
+    """
+
+    # st.markdown parses via CommonMark, which treats 4-space-indented lines as
+    # a code block. The f-string above is built inside indented Python, so it
+    # would otherwise render as literal escaped text instead of HTML.
+    return "\n".join(line.strip() for line in stepper_html.strip().splitlines())
+
+
 def _render_workflow_trace(final_result) -> None:
     """
-    Display workflow trace for the agentic AI demo.
+    Display a node-level progress tracker for the agentic workflow as a vertical stepper.
     """
 
     st.subheader("Review Steps")
 
-    if not final_result.agent_trace:
+    stepper_html = _build_stepper_html(final_result.agent_trace)
+
+    if stepper_html is None:
         st.info("No workflow trace available.")
         return
 
-    trace_rows = trace_to_rows(final_result.agent_trace)
-    trace_df = pd.DataFrame(trace_rows)
-
-    st.dataframe(trace_df, use_container_width=True, hide_index=True)
+    st.markdown(stepper_html, unsafe_allow_html=True)
 
 
 def _render_full_report_download(final_result) -> None:
@@ -475,14 +611,38 @@ def main() -> None:
             return
 
         llm_client = LLMClient(provider=provider)
+        final_result = None
 
-        with st.spinner("Reviewing the resume and generating suggestions..."):
-            final_result = run_resume_adjuster(
+        with st.status(
+            "Reviewing the resume and generating suggestions...", expanded=True
+        ) as status:
+            stepper_placeholder = st.empty()
+
+            for item in stream_resume_adjuster(
                 job_description=job_description,
                 current_resume=current_resume,
                 coursework_student_info=coursework_student_info,
                 llm_client=llm_client,
-            )
+            ):
+                if isinstance(item, FinalWorkflowResult):
+                    final_result = item
+                else:
+                    stepper_html = _build_stepper_html(item)
+                    if stepper_html is not None:
+                        stepper_placeholder.markdown(stepper_html, unsafe_allow_html=True)
+
+            if final_result is not None and final_result.success:
+                status.update(
+                    label="Tailored suggestions generated.",
+                    state="complete",
+                    expanded=False,
+                )
+            else:
+                status.update(
+                    label="Resume review completed with issues.",
+                    state="error",
+                    expanded=False,
+                )
 
         st.session_state["final_result"] = final_result
         st.session_state["source_resume_text"] = current_resume
@@ -502,17 +662,17 @@ def main() -> None:
 
         tab1, tab2, tab3 = st.tabs(
             [
-                "Job Match Review",
                 "Suggested Resume Changes",
+                "Job Match Review",
                 "Review Steps",
             ]
         )
 
         with tab1:
-            _render_agent_1_output(final_result)
+            _render_agent_2_output(final_result)
 
         with tab2:
-            _render_agent_2_output(final_result)
+            _render_agent_1_output(final_result)
 
         with tab3:
             _render_workflow_trace(final_result)

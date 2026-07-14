@@ -237,7 +237,12 @@ class ResumeChange(BaseModel):
         description="Why this change improves alignment with the target job."
     )
     evidence_source: str = Field(
-        description="Where the supporting evidence came from, such as original resume, coursework info, project info, or Agent 1 revision brief."
+        description="For add/rewrite changes: an exact, verbatim quote copied from the "
+                     "current resume or the coursework/student background information "
+                     "that truthfully supports this change -- not a category label like "
+                     "'original resume' or 'coursework info'. A deterministic validator "
+                     "checks that this text actually appears in one of those two source "
+                     "texts."
     )
 
 
