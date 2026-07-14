@@ -1,0 +1,36 @@
+Data Analyst Intern — Northgate Retail Analytics
+
+About the role:
+Northgate Retail Analytics helps mid-size retailers understand their sales and
+customer data. We're looking for a Data Analyst Intern to join our small analytics
+team for a summer internship, supporting weekly reporting and ad-hoc analysis for
+retail clients.
+
+Responsibilities:
+- Write SQL queries against our retail sales data warehouse to pull data for
+  recurring and ad-hoc reports.
+- Clean and analyze data using Python (pandas) or Excel.
+- Build and maintain dashboards in Tableau or Power BI to track sales, inventory,
+  and customer trends.
+- Summarize findings in clear, non-technical language for client-facing analysts.
+- Assist senior analysts with statistical analysis (e.g., trend analysis, basic
+  forecasting) for quarterly business reviews.
+- Participate in team stand-ups and document your analysis process.
+
+Requirements:
+- Currently pursuing a degree in Data Science, Statistics, Computer Science,
+  Business Analytics, or a related field.
+- Working knowledge of SQL (able to write joins, aggregations, and filters).
+- Familiarity with Python or a similar language for data manipulation.
+- Experience building dashboards or visualizations in a BI tool (Tableau, Power BI,
+  or similar) is strongly preferred.
+- Comfortable working with Excel for smaller analyses (pivot tables, formulas).
+- Strong written communication skills — able to explain data findings to
+  non-technical stakeholders.
+- Coursework or project experience with statistics (hypothesis testing,
+  regression, or similar) is a plus.
+
+Nice to have:
+- Experience with version control (Git).
+- Prior internship or part-time work involving data reporting.
+- Familiarity with retail or e-commerce data.

@@ -484,11 +484,16 @@ def main() -> None:
                 llm_client=llm_client,
             )
 
+        st.session_state["final_result"] = final_result
+        st.session_state["source_resume_text"] = current_resume
+
+    final_result = st.session_state.get("final_result")
+
+    if final_result is not None:
         if final_result.success:
             st.success("Tailored suggestions generated.")
         else:
             st.warning("Resume review completed, but some issues need attention.")
-
 
         if final_result.errors:
             with st.expander("Errors", expanded=True):
@@ -512,13 +517,11 @@ def main() -> None:
         with tab3:
             _render_workflow_trace(final_result)
 
-
     else:
         st.info(
             "Upload or paste your resume, target job description, and "
             "coursework/background information, then click "
             "**Generate tailored suggestions**."
-
         )
 
 

@@ -91,6 +91,7 @@ tested and reused independently of the UI).
 from __future__ import annotations
 
 import hashlib
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -106,6 +107,22 @@ class DocumentExportError(RuntimeError):
 _TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "templates" / "resume_template.tex"
 
 
+def _require_binary(binary_name: str) -> None:
+    """
+    Raise a clear error if a required system binary isn't on PATH.
+
+    pandoc/tectonic failures otherwise surface as an opaque subprocess error deep
+    inside pypandoc; checking up front lets us point the user at the fix.
+    """
+
+    if shutil.which(binary_name) is None:
+        kind = "PDF" if binary_name == "tectonic" else "Document"
+        raise DocumentExportError(
+            f"{kind} export requires {binary_name}. Install it using the workshop "
+            "prerequisite instructions."
+        )
+
+
 def _convert_markdown(
     markdown_text: str,
     to_format: str,
@@ -117,6 +134,8 @@ def _convert_markdown(
     pypandoc requires an `outputfile` for binary formats like pdf/docx, so we
     write to a temporary directory and read the bytes back.
     """
+
+    _require_binary("pandoc")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_path = Path(tmp_dir) / f"resume.{to_format}"
@@ -141,6 +160,8 @@ def render_resume_pdf(markdown_text: str) -> bytes:
     """
     Typeset the resume Markdown into a PDF using the LaTeX resume template.
     """
+
+    _require_binary("tectonic")
 
     return _convert_markdown(
         markdown_text,
@@ -174,6 +195,12 @@ Notes:
   `--pdf-engine=tectonic` so pandoc drives the whole Markdown → LaTeX → PDF pipeline.
 - `render_resume_docx` needs no template — pandoc's built-in Markdown → DOCX conversion
   already produces a normal, editable Word document.
+- `_require_binary` fails fast with a friendly `DocumentExportError` — "PDF export
+  requires tectonic. Install it..." — instead of letting a missing `pandoc`/`tectonic`
+  surface as a raw subprocess error. `render_resume_docx` only calls it indirectly via
+  `_convert_markdown` (checks `pandoc`); `render_resume_pdf` additionally checks
+  `tectonic` up front, since that's the actual PDF engine and pandoc alone can't tell you
+  it's missing until compilation is already underway.
 - `markdown_content_hash` will be used in Step 3 to avoid re-running the (relatively
   slow) LaTeX compilation on every Streamlit rerun when the resume content hasn't
   changed.
@@ -190,7 +217,7 @@ At the top of `app.py`, add:
 import base64
 ```
 
-and extend the `src.resume_renderer` import block with a new import:
+Add this new import block near the other `src` imports:
 
 ```python
 from src.document_export import (
@@ -203,12 +230,12 @@ from src.document_export import (
 
 ### 3b. Replace `_render_updated_resume`
 
-Find `_render_updated_resume` in `app.py` (around line 284) and replace it entirely with:
+Find `_render_updated_resume` in `app.py` (around line 332) and replace it entirely with:
 
 ```python
-def _render_updated_resume_tab(final_result) -> None:
+def _render_updated_resume_tab(final_result, original_resume: str) -> None:
     """
-    Display the updated resume, a LaTeX-typeset preview, and document downloads.
+    Display a before/after resume comparison, a LaTeX-typeset preview, and downloads.
     """
 
     st.subheader("Updated Resume")
@@ -217,7 +244,18 @@ def _render_updated_resume_tab(final_result) -> None:
         final_result.final_resume_markdown or final_result.resume_revision
     )
 
-    st.markdown(updated_resume)
+    st.markdown("---")
+    st.subheader("Before / After")
+
+    col_before, col_after = st.columns(2)
+
+    with col_before:
+        st.markdown("**Original Resume**")
+        st.markdown(original_resume or "_No original resume text available._")
+
+    with col_after:
+        st.markdown("**Updated Resume**")
+        st.markdown(updated_resume)
 
     st.download_button(
         label="Download updated resume as Markdown",
@@ -284,32 +322,50 @@ the tab or clicking a download button would silently re-run the LaTeX compilatio
 time. Keying by a hash of `updated_resume` means the cached documents stay valid until
 the actual resume content changes, and a fresh run naturally gets a fresh cache key.
 
-### 3c. Add the 4th tab
+This is the same reason `main()` already stores `final_result` itself in
+`st.session_state` (see the `st.session_state["final_result"] = final_result` line right
+after `run_resume_adjuster(...)` is called) instead of keeping it local to the
+`if run_clicked:` block: clicking **Generate preview** inside this new tab triggers a
+Streamlit rerun too, and without that persistence the whole results section — not just
+the LaTeX preview — would disappear on that rerun.
 
-Find the tab block in `main()` (around line 450) and change it from 3 tabs to 4:
+### 3c. Add the 4th tab, first
+
+Find the tab block in `main()` (around line 503) and change it from 3 tabs to 4. Put
+**"Updated Resume" first**: for a non-technical user, the final revised resume is the
+actual deliverable, so it should be the tab they land on rather than something they have
+to dig for after three agent-analysis tabs.
 
 ```python
 tab1, tab2, tab3, tab4 = st.tabs(
     [
+        "Updated Resume",
         "Job Match Review",
         "Suggested Resume Changes",
         "Review Steps",
-        "Updated Resume",
     ]
 )
 
 with tab1:
-    _render_agent_1_output(final_result)
+    _render_updated_resume_tab(
+        final_result, st.session_state.get("source_resume_text", "")
+    )
 
 with tab2:
-    _render_agent_2_output(final_result)
+    _render_agent_1_output(final_result)
 
 with tab3:
-    _render_workflow_trace(final_result)
+    _render_agent_2_output(final_result)
 
 with tab4:
-    _render_updated_resume_tab(final_result)
+    _render_workflow_trace(final_result)
 ```
+
+`source_resume_text` is set alongside `final_result` in `main()`'s
+`st.session_state["final_result"] = final_result` line — it's the resume text that was
+actually used to produce this `final_result`, so the "Before" side of the Before/After
+view in Step 3b stays correct even if the user edits the resume text area afterward
+without regenerating.
 
 ---
 
@@ -335,12 +391,18 @@ from src.document_export import (
 )
 
 
+def _patch_which_present():
+    """Pretend both pandoc and tectonic are installed, regardless of the real PATH."""
+
+    return patch("src.document_export.shutil.which", return_value="/usr/bin/fake")
+
+
 def test_render_resume_pdf_calls_pandoc_with_template_and_tectonic() -> None:
     def fake_convert(text, to, format, outputfile, extra_args):
         with open(outputfile, "wb") as handle:
             handle.write(b"%PDF-fake")
 
-    with patch(
+    with _patch_which_present(), patch(
         "src.document_export.pypandoc.convert_text", side_effect=fake_convert
     ) as mock_convert:
         pdf_bytes = render_resume_pdf("# Resume\n\n## Skills\n\n- Python")
@@ -358,7 +420,7 @@ def test_render_resume_docx_calls_pandoc() -> None:
         with open(outputfile, "wb") as handle:
             handle.write(b"PK\x03\x04fake")
 
-    with patch(
+    with _patch_which_present(), patch(
         "src.document_export.pypandoc.convert_text", side_effect=fake_convert
     ) as mock_convert:
         docx_bytes = render_resume_docx("# Resume")
@@ -370,11 +432,20 @@ def test_render_resume_docx_calls_pandoc() -> None:
 
 
 def test_render_resume_pdf_wraps_pandoc_failure() -> None:
-    with patch(
+    with _patch_which_present(), patch(
         "src.document_export.pypandoc.convert_text",
         side_effect=RuntimeError("pandoc exploded"),
     ):
         with pytest.raises(DocumentExportError, match="pandoc exploded"):
+            render_resume_pdf("# Resume")
+
+
+def test_render_resume_pdf_raises_friendly_error_when_tectonic_missing() -> None:
+    with patch(
+        "src.document_export.shutil.which",
+        side_effect=lambda name: "/usr/bin/pandoc" if name == "pandoc" else None,
+    ):
+        with pytest.raises(DocumentExportError, match="requires tectonic"):
             render_resume_pdf("# Resume")
 
 
@@ -403,17 +474,22 @@ def test_render_resume_docx_end_to_end_produces_valid_docx() -> None:
 ## Verification Checklist
 
 - [ ] `streamlit run app.py` starts without import errors.
-- [ ] Click **Load sample data** in the sidebar, then **Generate tailored suggestions**.
-- [ ] Open the new **Updated Resume** tab — the Markdown preview renders as before.
+- [ ] Click **Load sample data** in the sidebar — all three fields populate with sample
+      content.
+- [ ] Click **Generate tailored suggestions** — **Updated Resume** is the first,
+      default-active tab (not the last one).
+- [ ] The **Updated Resume** tab shows a "Before / After" section with the original
+      resume and the updated resume side by side, followed by the Markdown preview.
 - [ ] Click **Generate preview** — after a short spinner, an inline PDF preview appears
       showing a typeset resume (colored section headers, bullet lists, no visible LaTeX
-      markup — not raw `\section{...}` text).
+      markup — not raw `\section{...}` text) — and the other tabs/results remain visible
+      after this rerun.
 - [ ] **Download as Word (.docx)** produces a file that opens correctly in Word/Google
       Docs/Pages.
 - [ ] **Download as PDF** produces a file that opens correctly and matches the preview.
 - [ ] Clicking a download button does *not* re-trigger LaTeX compilation (no spinner) —
       confirms the session-state cache is working.
-- [ ] `pytest` passes, including the 5 tests in `tests/test_document_export.py`.
+- [ ] `pytest` passes, including the 6 tests in `tests/test_document_export.py`.
 
 ---
 

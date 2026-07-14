@@ -1,0 +1,32 @@
+Relevant Coursework
+
+Database Systems (Fall 2024)
+- Learned SQL from the ground up: SELECT/WHERE filtering, multi-table JOINs,
+  GROUP BY aggregations, and subqueries.
+- Final project: designed a normalized schema for a small e-commerce database and
+  wrote SQL queries to answer business questions (top products, monthly revenue by
+  category).
+
+Data Visualization (Spring 2025)
+- Built three dashboards in Tableau using public datasets (city bike-share usage,
+  a retail sales sample dataset, and campus dining survey results).
+- Presented one dashboard to the class and explained the findings in plain language
+  for a non-technical audience.
+
+Applied Statistics (Fall 2023)
+- Covered descriptive statistics, hypothesis testing, and simple linear regression.
+- Group project: used linear regression to analyze the relationship between study
+  hours and exam scores for a class dataset.
+
+Introduction to Programming (Spring 2023)
+- Learned Python fundamentals; used pandas in later coursework for data cleaning
+  and aggregation.
+
+Other Background
+- Comfortable with Git for version control (used in Database Systems and Data
+  Visualization group projects, hosted on GitHub).
+- Completed a free online "SQL for Data Analysis" course on my own over winter
+  break to prepare for internship applications.
+- No professional internship experience yet — all data work so far is coursework
+  and class projects, described above. Do not claim professional experience I do
+  not have.
