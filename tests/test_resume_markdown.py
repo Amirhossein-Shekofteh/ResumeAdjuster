@@ -108,6 +108,78 @@ def test_does_not_insert_blank_line_between_consecutive_bullets() -> None:
     assert "- Python\n- SQL\n- Excel" in normalized
 
 
+def test_adds_hard_line_break_before_label_lines() -> None:
+    """
+    Consecutive "Label: value" fact lines (degree, graduation date, GPA,
+    coursework) with no blank line between them must not collapse into one
+    run-on paragraph -- confirmed by actually rendering this exact shape
+    through the LaTeX pipeline and inspecting the PDF.
+    """
+
+    raw = (
+        "Jordan Lee\n"
+        "\n"
+        "Education\n"
+        "B.S. in Data Science, Riverbend State University\n"
+        "Expected Graduation: May 2027\n"
+        "GPA: 3.6/4.0\n"
+        "Relevant Coursework: Database Systems, Data Visualization\n"
+    )
+
+    normalized = normalize_resume_markdown(raw)
+    lines = normalized.splitlines()
+
+    degree_index = lines.index(
+        "B.S. in Data Science, Riverbend State University  "
+    )
+    assert lines[degree_index + 1] == "Expected Graduation: May 2027  "
+    assert lines[degree_index + 2] == "GPA: 3.6/4.0  "
+    assert (
+        lines[degree_index + 3]
+        == "Relevant Coursework: Database Systems, Data Visualization"
+    )
+
+
+def test_does_not_split_a_hard_wrapped_prose_sentence() -> None:
+    """
+    Regression guard: an initial version of this heuristic added a break
+    between ANY two adjacent plain lines, which incorrectly split ordinary
+    prose that was merely word-wrapped in the source text (no Label: value
+    pattern involved) into two visually separate lines instead of letting
+    it flow/wrap naturally.
+    """
+
+    raw = (
+        "Jordan Lee\n"
+        "\n"
+        "Summary\n"
+        "Data Science student interested in an analytics role where I can "
+        "apply my Python\n"
+        "and statistics coursework to real business problems.\n"
+    )
+
+    normalized = normalize_resume_markdown(raw)
+
+    assert "Python\nand statistics" in normalized
+    assert "Python  \n" not in normalized
+
+
+def test_label_line_hard_breaks_are_idempotent() -> None:
+    raw = (
+        "Jordan Lee\n"
+        "\n"
+        "Education\n"
+        "B.S. in Data Science\n"
+        "Expected Graduation: May 2027\n"
+        "GPA: 3.6/4.0\n"
+    )
+
+    once = normalize_resume_markdown(raw)
+    twice = normalize_resume_markdown(once)
+
+    assert once == twice
+
+
 def test_extract_resume_title_splits_leading_heading() -> None:
     text = "# Jordan Lee\n\n## Skills\n\n- Python"
 

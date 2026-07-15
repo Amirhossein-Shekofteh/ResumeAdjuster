@@ -35,6 +35,7 @@ _KNOWN_SECTION_HEADINGS = {
 }
 
 _BULLET_PATTERN = re.compile(r"^(\s*)[•*-]\s+")
+_LABEL_LINE_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9 /&()'-]{1,40}:\s")
 
 
 def _has_markdown_headings(text: str) -> bool:
@@ -84,6 +85,48 @@ def _ensure_blank_line_before_bullets(text: str) -> str:
     return "\n".join(result)
 
 
+def _add_hard_line_breaks_before_label_lines(text: str) -> str:
+    """
+    Insert a Markdown hard line break (two trailing spaces) before a line
+    that looks like a distinct labeled fact (e.g. "GPA: 3.6/4.0",
+    "Expected Graduation: May 2027", "Stack: Python, PyTorch").
+
+    Resume detail blocks often stack several such facts on consecutive
+    lines with no blank line between them; CommonMark joins consecutive
+    non-blank lines into one flowing paragraph, so without this they'd
+    render run together. Only lines matching the Label: value pattern
+    trigger a break -- a generic "any two adjacent plain lines get a
+    break" rule was tried and rejected: it also splits ordinary prose
+    sentences that were merely hard-wrapped in the source text (e.g. a
+    Summary paragraph wrapped at ~80 characters), which must keep flowing
+    as one paragraph.
+    """
+
+    lines = text.splitlines()
+    result: list[str] = []
+
+    for line in lines:
+        previous = result[-1] if result else ""
+        is_label_line = bool(_LABEL_LINE_PATTERN.match(line.strip()))
+        previous_stripped = previous.rstrip()
+        previous_is_heading = previous_stripped.lstrip().startswith("#")
+        previous_is_bullet = bool(_BULLET_PATTERN.match(previous))
+        previous_ends_with_break = previous_stripped.endswith("  ")
+
+        if (
+            is_label_line
+            and previous_stripped
+            and not previous_is_heading
+            and not previous_is_bullet
+            and not previous_ends_with_break
+        ):
+            result[-1] = previous_stripped + "  "
+
+        result.append(line)
+
+    return "\n".join(result)
+
+
 def normalize_resume_markdown(text: str) -> str:
     """
     Make sure resume text has real Markdown heading/bullet syntax before it
@@ -106,7 +149,9 @@ def normalize_resume_markdown(text: str) -> str:
         return text
 
     if _has_markdown_headings(text):
-        return _ensure_blank_line_before_bullets(_normalize_bullets(text))
+        bulleted = _normalize_bullets(text)
+        labeled = _add_hard_line_breaks_before_label_lines(bulleted)
+        return _ensure_blank_line_before_bullets(labeled)
 
     lines = text.splitlines()
     promoted: list[str] = []
@@ -131,7 +176,8 @@ def normalize_resume_markdown(text: str) -> str:
         promoted.append(line)
 
     normalized = _normalize_bullets("\n".join(promoted))
-    return _ensure_blank_line_before_bullets(normalized)
+    labeled = _add_hard_line_breaks_before_label_lines(normalized)
+    return _ensure_blank_line_before_bullets(labeled)
 
 
 def extract_resume_title(text: str) -> tuple[str | None, str]:
