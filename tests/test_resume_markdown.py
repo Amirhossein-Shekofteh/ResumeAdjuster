@@ -108,19 +108,21 @@ def test_does_not_insert_blank_line_between_consecutive_bullets() -> None:
     assert "- Python\n- SQL\n- Excel" in normalized
 
 
-def test_adds_hard_line_break_before_label_lines() -> None:
+def test_adds_hard_line_break_between_structured_section_facts() -> None:
     """
-    Consecutive "Label: value" fact lines (degree, graduation date, GPA,
-    coursework) with no blank line between them must not collapse into one
-    run-on paragraph -- confirmed by actually rendering this exact shape
-    through the LaTeX pipeline and inspecting the PDF.
+    Consecutive plain fact lines in a structured section (institution name,
+    degree title, graduation date, GPA, coursework -- not all of them
+    "Label: value" lines) with no blank line between them must not collapse
+    into one run-on paragraph -- confirmed by actually rendering this exact
+    shape through the LaTeX pipeline and inspecting the PDF.
     """
 
     raw = (
         "Jordan Lee\n"
         "\n"
         "Education\n"
-        "B.S. in Data Science, Riverbend State University\n"
+        "Riverbend State University\n"
+        "B.S. in Data Science\n"
         "Expected Graduation: May 2027\n"
         "GPA: 3.6/4.0\n"
         "Relevant Coursework: Database Systems, Data Visualization\n"
@@ -129,15 +131,39 @@ def test_adds_hard_line_break_before_label_lines() -> None:
     normalized = normalize_resume_markdown(raw)
     lines = normalized.splitlines()
 
-    degree_index = lines.index(
-        "B.S. in Data Science, Riverbend State University  "
-    )
-    assert lines[degree_index + 1] == "Expected Graduation: May 2027  "
-    assert lines[degree_index + 2] == "GPA: 3.6/4.0  "
+    university_index = lines.index("Riverbend State University  ")
+    assert lines[university_index + 1] == "B.S. in Data Science  "
+    assert lines[university_index + 2] == "Expected Graduation: May 2027  "
+    assert lines[university_index + 3] == "GPA: 3.6/4.0  "
     assert (
-        lines[degree_index + 3]
+        lines[university_index + 4]
         == "Relevant Coursework: Database Systems, Data Visualization"
     )
+
+
+def test_does_not_break_wrapped_bullet_continuation_line() -> None:
+    """
+    Regression guard: a bullet whose text wraps onto an indented
+    continuation line in the source (no bullet marker on that second line)
+    must keep flowing as part of the same bullet, not get split apart by
+    the structured-section line-break heuristic.
+    """
+
+    raw = (
+        "Jordan Lee\n"
+        "\n"
+        "Projects\n"
+        "Personal Budget Tracker (Class Project)\n"
+        "- Built a simple Python script to categorize and summarize personal "
+        "expenses from a\n"
+        "  CSV file.\n"
+        "- Used pandas to compute monthly spending totals by category.\n"
+    )
+
+    normalized = normalize_resume_markdown(raw)
+
+    assert "from a\n  CSV file." in normalized
+    assert "from a  \n" not in normalized
 
 
 def test_does_not_split_a_hard_wrapped_prose_sentence() -> None:
@@ -164,11 +190,12 @@ def test_does_not_split_a_hard_wrapped_prose_sentence() -> None:
     assert "Python  \n" not in normalized
 
 
-def test_label_line_hard_breaks_are_idempotent() -> None:
+def test_structured_section_hard_breaks_are_idempotent() -> None:
     raw = (
         "Jordan Lee\n"
         "\n"
         "Education\n"
+        "Riverbend State University\n"
         "B.S. in Data Science\n"
         "Expected Graduation: May 2027\n"
         "GPA: 3.6/4.0\n"

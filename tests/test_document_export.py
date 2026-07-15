@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
+import re
 import shutil
+import zipfile
 from unittest.mock import patch
 
 import pytest
@@ -162,3 +165,30 @@ def test_render_resume_docx_end_to_end_produces_valid_docx() -> None:
     docx_bytes = render_resume_docx("# Jordan Lee\n\n## Skills\n\n- Python\n- SQL")
 
     assert docx_bytes[:4] == b"PK\x03\x04"
+
+
+@pytest.mark.skipif(
+    not shutil.which("pandoc"),
+    reason="pandoc not installed in this environment",
+)
+def test_render_resume_docx_does_not_treat_leading_phone_number_as_a_list() -> None:
+    """
+    pandoc's default Markdown reader has `fancy_lists` on, which reads a
+    leading parenthesized number (e.g. a phone number) as an ordered-list
+    marker. Confirms the docx writer's actual output paragraph for that
+    line has no list numbering -- not just that conversion succeeds.
+    """
+
+    docx_bytes = render_resume_docx(
+        "# Jordan Lee\n\n"
+        "(555) 123-4567 • jordan.lee@example.edu\n\n"
+        "## Skills\n\n- Python\n- SQL"
+    )
+
+    with zipfile.ZipFile(io.BytesIO(docx_bytes)) as archive:
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+
+    paragraphs = re.findall(r"<w:p\b.*?</w:p>", document_xml, re.S)
+    phone_paragraph = next(p for p in paragraphs if "123-4567" in p)
+
+    assert "<w:numPr>" not in phone_paragraph

@@ -35,7 +35,9 @@ _KNOWN_SECTION_HEADINGS = {
 }
 
 _BULLET_PATTERN = re.compile(r"^(\s*)[•*-]\s+")
-_LABEL_LINE_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9 /&()'-]{1,40}:\s")
+_HEADING_PATTERN = re.compile(r"^(#+)\s+(.*)$")
+_CONTINUATION_INDENT_PATTERN = re.compile(r"^\s+\S")
+_PROSE_SECTION_HEADINGS = {"summary", "objective"}
 
 
 def _has_markdown_headings(text: str) -> bool:
@@ -85,39 +87,63 @@ def _ensure_blank_line_before_bullets(text: str) -> str:
     return "\n".join(result)
 
 
-def _add_hard_line_breaks_before_label_lines(text: str) -> str:
+def _add_hard_line_breaks_in_structured_sections(text: str) -> str:
     """
-    Insert a Markdown hard line break (two trailing spaces) before a line
-    that looks like a distinct labeled fact (e.g. "GPA: 3.6/4.0",
-    "Expected Graduation: May 2027", "Stack: Python, PyTorch").
+    Insert a Markdown hard line break (two trailing spaces) between adjacent
+    plain lines inside structured resume sections (Education, Skills,
+    Experience, ...), so each fact (institution, degree, date, GPA, a
+    Skills label line, ...) stays on its own line instead of collapsing
+    into one run-on paragraph under CommonMark.
 
-    Resume detail blocks often stack several such facts on consecutive
-    lines with no blank line between them; CommonMark joins consecutive
-    non-blank lines into one flowing paragraph, so without this they'd
-    render run together. Only lines matching the Label: value pattern
-    trigger a break -- a generic "any two adjacent plain lines get a
-    break" rule was tried and rejected: it also splits ordinary prose
-    sentences that were merely hard-wrapped in the source text (e.g. a
-    Summary paragraph wrapped at ~80 characters), which must keep flowing
-    as one paragraph.
+    Deliberately skipped inside "Summary"/"Objective" sections: those are
+    ordinary prose that was merely hard-wrapped in the source text (e.g. a
+    Summary paragraph wrapped at ~80 characters) and must keep flowing as
+    one paragraph -- confirmed by rendering both cases through the real
+    LaTeX pipeline. Also skipped: heading lines, bullet-marker lines
+    (Markdown already gives each its own list item), and indented lines
+    that continue a wrapped bullet's text (e.g. a long bullet sentence
+    hard-wrapped mid-item in the source).
+
+    This assumes structured sections use short fact lines or bullets for
+    any real content, never un-bulleted wrapped prose -- true of every
+    resume seen so far, but a resume with long plain-paragraph (non-bullet)
+    descriptions under e.g. Experience would have those sentences split
+    too. Worth revisiting if that shape shows up.
     """
 
     lines = text.splitlines()
     result: list[str] = []
+    in_prose_section = False
 
     for line in lines:
+        stripped = line.strip()
+        heading_match = _HEADING_PATTERN.match(stripped)
+
+        if heading_match:
+            in_prose_section = (
+                heading_match.group(2).strip().lower() in _PROSE_SECTION_HEADINGS
+            )
+            result.append(line)
+            continue
+
         previous = result[-1] if result else ""
-        is_label_line = bool(_LABEL_LINE_PATTERN.match(line.strip()))
         previous_stripped = previous.rstrip()
-        previous_is_heading = previous_stripped.lstrip().startswith("#")
+        is_bullet = bool(_BULLET_PATTERN.match(line))
         previous_is_bullet = bool(_BULLET_PATTERN.match(previous))
+        is_continuation_indent = bool(
+            _CONTINUATION_INDENT_PATTERN.match(line)
+        ) and not is_bullet
+        previous_is_heading = previous_stripped.lstrip().startswith("#")
         previous_ends_with_break = previous_stripped.endswith("  ")
 
         if (
-            is_label_line
+            not in_prose_section
+            and stripped
             and previous_stripped
-            and not previous_is_heading
+            and not is_bullet
             and not previous_is_bullet
+            and not is_continuation_indent
+            and not previous_is_heading
             and not previous_ends_with_break
         ):
             result[-1] = previous_stripped + "  "
@@ -150,7 +176,7 @@ def normalize_resume_markdown(text: str) -> str:
 
     if _has_markdown_headings(text):
         bulleted = _normalize_bullets(text)
-        labeled = _add_hard_line_breaks_before_label_lines(bulleted)
+        labeled = _add_hard_line_breaks_in_structured_sections(bulleted)
         return _ensure_blank_line_before_bullets(labeled)
 
     lines = text.splitlines()
@@ -176,7 +202,7 @@ def normalize_resume_markdown(text: str) -> str:
         promoted.append(line)
 
     normalized = _normalize_bullets("\n".join(promoted))
-    labeled = _add_hard_line_breaks_before_label_lines(normalized)
+    labeled = _add_hard_line_breaks_in_structured_sections(normalized)
     return _ensure_blank_line_before_bullets(labeled)
 
 

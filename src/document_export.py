@@ -18,6 +18,14 @@ class DocumentExportError(RuntimeError):
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "templates" / "resume_template.tex"
 
+# pandoc's default "md" reader has the `fancy_lists` extension on, which reads a
+# leading parenthesized number as an ordered-list marker (e.g. a phone number like
+# "(682) 540-6411 ..." becomes an ordered list starting at item 682, indenting the
+# whole line as a list item). Resumes have no legitimate use for fancy_lists'
+# parenthesized/lettered/roman-numeral markers, so it's disabled outright. Confirmed
+# this doesn't affect plain `- ` bullets or plain `1.` ordered lists.
+_MARKDOWN_READER_FORMAT = "markdown-fancy_lists"
+
 
 def _require_binary(binary_name: str) -> None:
     """
@@ -56,7 +64,7 @@ def _convert_markdown(
             pypandoc.convert_text(
                 markdown_text,
                 to=to_format,
-                format="md",
+                format=_MARKDOWN_READER_FORMAT,
                 outputfile=str(output_path),
                 extra_args=extra_args or [],
             )
