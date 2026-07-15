@@ -1,0 +1,5 @@
+Additional Background for Maya Patel
+
+- The resume already includes all material Android, Java/Kotlin, large-screen, gaming, testing, accessibility, debugging, documentation, and cross-functional evidence relevant to this role.
+- There are no additional unpublished Android projects, employment achievements, coursework, certifications, or metrics that would materially improve the resume.
+- Do not add distributed systems, machine learning, networking, or security claims; Maya does not have additional evidence in those areas.

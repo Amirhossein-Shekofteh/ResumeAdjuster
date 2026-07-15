@@ -1,0 +1,22 @@
+Additional Background for Jordan Lee
+
+The visible resume is outdated and describes Jordan's work too generically. The following details are truthful and may be used to revise it.
+
+### BrightRoute Android Driver Application | January 2022 – Present
+- For more than 2.5 years, Jordan developed the company's native Android driver application in Java and Kotlin using Android SDK, Android Views, and Jetpack Compose.
+- Built adaptive interfaces for 10-inch and 12-inch fleet tablets, including two-pane dispatch screens, orientation changes, window-size classes, and multi-window behavior.
+- Implemented a large-screen route-planning workflow that reduced driver task completion time by 18% in a controlled usability study.
+- Added JUnit, Robolectric, and Espresso unit/integration tests for login, route acceptance, offline synchronization, and tablet navigation; increased automated coverage of the Android module from 46% to 76%.
+- Triaged crashes and ANRs using logcat, Android Studio Profiler, Firebase Crashlytics, and device logs; resolved 28 production defects across multiple Android OS versions.
+- Improved accessibility with TalkBack labels, logical focus order, external-keyboard navigation, larger touch targets, and high-contrast status indicators.
+- Worked directly with Product Management, UX researchers, QA, and fleet-partner representatives to define requirements and validate releases.
+- Authored technical design documents for offline synchronization, adaptive tablet layouts, and test strategy.
+
+### Android Large-Screen Game Project | September 2021 – December 2021
+- Built a Kotlin Android puzzle game optimized for tablets and Chromebooks.
+- Implemented responsive board layouts, keyboard controls, and Bluetooth game-controller input.
+- Used graph data structures and breadth-first search for puzzle generation and solution validation.
+- Published the source code on GitHub and documented Linux-based CI setup.
+
+### Additional truthful skills
+Android SDK, Android Studio, Jetpack Compose, Android Views, Gradle, JUnit, Robolectric, Espresso, Firebase Crashlytics, TalkBack, adaptive layouts, multi-window, tablets, ChromeOS, game-controller input, data structures, graph algorithms.

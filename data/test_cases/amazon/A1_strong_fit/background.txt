@@ -1,0 +1,5 @@
+Additional Background for Elena Garcia
+
+- Elena's resume already contains all material evidence relevant to the role: graduate qualification, more than three years of business ML, advanced generative models, diffusion and flow methods, controllable image/video synthesis, multimodal/VLM workflows, visual grounding, segmentation, matting, depth/3D estimation, agentic orchestration, production deployment, and distributed systems.
+- There are no additional unpublished achievements or projects that would materially improve targeting for this position.
+- Do not add specific Prime Video or Amazon experience; Elena has not worked for Amazon.

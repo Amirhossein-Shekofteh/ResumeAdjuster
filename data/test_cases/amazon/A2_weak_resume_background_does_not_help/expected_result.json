@@ -1,0 +1,12 @@
+{
+  "case_id": "A2_amazon_weak_resume_background_does_not_help",
+  "job_id": "amazon_prime_video_genai",
+  "expected_agent2_decision": "keep_insufficient_fit",
+  "scenario": "The resume shows senior classical ML experience but not the advanced GenAI/CV research required, and the background provides no missing evidence.",
+  "expected_behavior": [
+    "Return the original resume rather than manufacturing a GenAI profile.",
+    "Identify diffusion/flow, computer vision, multimodal GenAI, and applied research as major gaps.",
+    "Do not convert pretrained-embedding search into trained computer-vision or generative-model experience."
+  ],
+  "paired_with": "A3_amazon_same_resume_background_creates_fit"
+}

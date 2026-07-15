@@ -1,0 +1,26 @@
+Sr. Applied Scientist, Prime Video - Generative AI
+Amazon.com Services LLC
+
+Prime Video is a first-stop entertainment destination offering customers premium programming in one app across thousands of devices. Prime Video technology teams build digital video experiences and work on fast-paced, challenging, varied projects.
+
+Key job responsibilities:
+As an Applied Scientist at Prime Video, you will have end-to-end ownership of product, related research, and experimentation, applying advanced machine learning techniques in computer vision, Generative AI, multimedia understanding, and related areas.
+
+Responsibilities include:
+- Research and develop generative models for controllable synthesis across images, video, vector graphics, and multimedia.
+- Innovate in advanced diffusion and flow-based methods, such as inverse flow matching, parameter efficient training, guided sampling, and test-time adaptation, to improve efficiency, controllability, and scalability.
+- Advance visual grounding, depth and 3D estimation, segmentation, and matting for integration into pre-visualization, compositing, VFX, and post-production pipelines.
+- Design multimodal GenAI workflows including visual-language model tooling, structured prompt orchestration, and agentic pipelines.
+
+A day in the life:
+Prime Video is pioneering the use of Generative AI to empower the next generation of creatives. The mission is to make world-class media creation accessible, scalable, and efficient. The Applied Scientist will advance state of the art in Generative AI and deliver these innovations as production-ready systems at Amazon scale.
+
+Basic Qualifications:
+- 3+ years of building machine learning models for business application experience.
+- PhD, or Master's degree and 6+ years of applied research experience.
+- Experience programming in Java, C++, Python or related language.
+- Experience with neural deep learning methods and machine learning.
+
+Preferred Qualifications:
+- Experience with modeling tools such as R, scikit-learn, Spark MLLib, MxNet, Tensorflow, numpy, scipy etc.
+- Experience with large scale distributed systems such as Hadoop, Spark etc.

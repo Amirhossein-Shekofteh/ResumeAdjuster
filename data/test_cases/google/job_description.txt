@@ -1,0 +1,26 @@
+Software Engineer III, Android Large Screen
+Google – San Jose, CA, USA
+
+Minimum qualifications:
+- Bachelor's degree or equivalent practical experience.
+- 2 years of experience with software development in one or more programming languages (e.g. Java), or 1 year of experience with an advanced degree.
+- 2 years of experience with Android application development.
+
+Preferred qualifications:
+- 2 years of experience with data structures and algorithms.
+- Experience working with one or more of the following: web or mobile application development, Unix/Linux environments, distributed and parallel systems, machine learning, information retrieval, natural language processing, networking, developing software systems, or security software development.
+- Experience developing accessible technologies.
+- Ability to learn and build great products.
+- Strong communication/collaboration skills.
+
+About the job:
+Google's software engineers develop the next-generation technologies that change how billions of users connect, explore, and interact with information and one another. Products handle information at massive scale and extend beyond web search. Engineers bring ideas from areas including information retrieval, distributed computing, large-scale system design, networking and data storage, security, artificial intelligence, natural language processing, UI design, and mobile.
+
+The team is dedicated to making gaming joyful on Android large screen devices. The team is creating a premier ecosystem for effortless and immersive play by enhancing the Android platform, developing new features, and collaborating with partners to position Android as a destination for quality large screen gaming.
+
+Responsibilities:
+- Design, develop, test, deploy, maintain, and enhance software solutions and features under guidance.
+- Ensure a high level of quality implementing unit and integration tests.
+- Participate in technical tasks with peers and stakeholders. Contribute to technical documentation.
+- Triage technical issues and debug, track, and resolve by analyzing the sources of issues and conducting investigation.
+- Work with Product Management, UX, Quality Assurance (QA), and other cross-functional partners to define requirements and design engineering solutions to user problems.

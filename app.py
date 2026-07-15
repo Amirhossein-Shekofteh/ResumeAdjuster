@@ -21,6 +21,63 @@ from src.schemas import AgentTraceStep, FinalWorkflowResult
 APP_TITLE = "ResumeAdjuster"
 APP_SUBTITLE = "Tailor suggestions for the resume to a target job using truthful evidence from coursework and experience"
 
+_AMAZON_JOB_DESCRIPTION_PATH = "data/test_cases/amazon/job_description.txt"
+
+_AMAZON_TEST_CASES = [
+    {
+        "key": "amazon_case_a1",
+        "label": "A1 — Elena Garcia: strong fit already",
+        "resume": "data/test_cases/amazon/A1_strong_fit/resume.md",
+        "coursework": "data/test_cases/amazon/A1_strong_fit/background.txt",
+    },
+    {
+        "key": "amazon_case_a2",
+        "label": "A2 — Daniel Kim: weak fit, background doesn't help",
+        "resume": "data/test_cases/amazon/A2_weak_resume_background_does_not_help/resume.md",
+        "coursework": "data/test_cases/amazon/A2_weak_resume_background_does_not_help/background.txt",
+    },
+    {
+        "key": "amazon_case_a3",
+        "label": "A3 — Daniel Kim: same resume, background creates fit",
+        "resume": "data/test_cases/amazon/A3_same_resume_background_creates_fit/resume.md",
+        "coursework": "data/test_cases/amazon/A3_same_resume_background_creates_fit/background.txt",
+    },
+]
+
+_GOOGLE_JOB_DESCRIPTION_PATH = "data/test_cases/google/job_description.txt"
+
+_GOOGLE_TEST_CASES = [
+    {
+        "key": "google_case_g1",
+        "label": "G1 — Maya Patel: strong fit already",
+        "resume": "data/test_cases/google/G1_strong_fit_no_background_value/resume.md",
+        "coursework": "data/test_cases/google/G1_strong_fit_no_background_value/background.txt",
+    },
+    {
+        "key": "google_case_g2",
+        "label": "G2 — Jordan Lee: weak fit, background doesn't help",
+        "resume": "data/test_cases/google/G2_weak_resume_background_does_not_help/resume.md",
+        "coursework": "data/test_cases/google/G2_weak_resume_background_does_not_help/background.txt",
+    },
+    {
+        "key": "google_case_g3",
+        "label": "G3 — Jordan Lee: same resume, background creates fit",
+        "resume": "data/test_cases/google/G3_same_resume_background_creates_fit/resume.md",
+        "coursework": "data/test_cases/google/G3_same_resume_background_creates_fit/background.txt",
+    },
+]
+
+_JOB_DESCRIPTION_GROUPS = {
+    "Amazon — Sr. Applied Scientist, Prime Video (GenAI)": {
+        "job_description": _AMAZON_JOB_DESCRIPTION_PATH,
+        "cases": _AMAZON_TEST_CASES,
+    },
+    "Google — Software Engineer III, Android Large Screen": {
+        "job_description": _GOOGLE_JOB_DESCRIPTION_PATH,
+        "cases": _GOOGLE_TEST_CASES,
+    },
+}
+
 
 def _allowed_upload_types() -> list[str]:
     """
@@ -518,18 +575,60 @@ def _render_full_report_download(final_result) -> None:
     )
 
 
-def _load_samples_into_session() -> None:
+def _load_case_into_session(
+    resume_path: str, job_description_path: str, coursework_path: str
+) -> None:
     """
-    Load sample files into Streamlit session state.
+    Load a resume/job-description/coursework triple into Streamlit session state.
     """
 
-    st.session_state["sample_resume"] = _read_sample_file("data/sample_resume.txt")
-    st.session_state["sample_job_description"] = _read_sample_file(
-        "data/sample_job_description.txt"
+    st.session_state["sample_resume"] = _read_sample_file(resume_path)
+    st.session_state["sample_job_description"] = _read_sample_file(job_description_path)
+    st.session_state["sample_coursework"] = _read_sample_file(coursework_path)
+
+
+def _load_samples_into_session() -> None:
+    """
+    Load the default sample files into Streamlit session state.
+    """
+
+    _load_case_into_session(
+        resume_path="data/sample_resume.txt",
+        job_description_path="data/sample_job_description.txt",
+        coursework_path="data/sample_coursework_and_student_info.txt",
     )
-    st.session_state["sample_coursework"] = _read_sample_file(
-        "data/sample_coursework_and_student_info.txt"
+
+
+def _render_sample_data_picker() -> None:
+    """
+    Let the user pick a job description, then a matching test case, to load into the form.
+    """
+
+    st.sidebar.markdown("**Sample data**")
+
+    job_description_option = st.sidebar.selectbox(
+        "Job description",
+        options=["Default sample", *_JOB_DESCRIPTION_GROUPS.keys()],
+        key="job_description_option",
     )
+
+    if job_description_option == "Default sample":
+        if st.sidebar.button("Load sample data"):
+            _load_samples_into_session()
+            st.rerun()
+        return
+
+    group = _JOB_DESCRIPTION_GROUPS[job_description_option]
+
+    st.sidebar.caption("Choose a test case to load:")
+    for case in group["cases"]:
+        if st.sidebar.button(case["label"], key=case["key"]):
+            _load_case_into_session(
+                resume_path=case["resume"],
+                job_description_path=group["job_description"],
+                coursework_path=case["coursework"],
+            )
+            st.rerun()
 
 
 def main() -> None:
@@ -561,9 +660,7 @@ def main() -> None:
         st.write(f"Max input length: `{CONFIG.max_input_text_length}` characters")
         _render_api_key_notice(provider)
 
-    if st.sidebar.button("Load sample data"):
-        _load_samples_into_session()
-        st.rerun()
+    _render_sample_data_picker()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(

@@ -1,0 +1,8 @@
+Additional Background for Jordan Lee
+
+- Jordan's work at BrightRoute was limited to Java/Kotlin backend services, internal command-line utilities, SQL data processing, and web-based operational tools.
+- Jordan has never developed or maintained an Android application and has no professional or academic Android project experience.
+- Jordan has not used Android SDK, Jetpack Compose, Android Views, Espresso, Robolectric, Android Studio, TalkBack, adaptive layouts, multi-window APIs, foldables, tablets, ChromeOS, or game-controller input.
+- The Campus Transit Dashboard was a React web application, not a mobile application.
+- There is no additional mobile, gaming, accessibility, or large-screen experience that can be added truthfully.
+- Do not infer Android experience from the presence of Kotlin on the resume; Kotlin was used only for backend services.

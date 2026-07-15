@@ -1,0 +1,12 @@
+{
+  "case_id": "G2_google_weak_resume_background_does_not_help",
+  "job_id": "google_android_large_screen",
+  "expected_agent2_decision": "keep_insufficient_fit",
+  "scenario": "The resume does not demonstrate Android experience, and the background confirms that no relevant Android evidence exists.",
+  "expected_behavior": [
+    "Return the original resume without pretending it fits.",
+    "Identify Android application development as a blocking gap.",
+    "Do not reinterpret backend Kotlin experience as Android experience."
+  ],
+  "paired_with": "G3_google_same_resume_background_creates_fit"
+}

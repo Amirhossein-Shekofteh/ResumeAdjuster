@@ -1,0 +1,7 @@
+Additional Background for Daniel Kim
+
+- Daniel's seven years of model-building experience is limited to classical machine learning for ranking, churn, forecasting, segmentation, and marketing analytics.
+- Daniel has not conducted applied research in generative AI, deep neural generation, computer vision, multimedia understanding, diffusion models, flow matching, guided sampling, parameter-efficient training, test-time adaptation, visual-language models, visual grounding, segmentation, matting, depth estimation, 3D estimation, VFX, compositing, or post-production systems.
+- The Catalog Similarity Search project used pretrained static embeddings and approximate-nearest-neighbor search; it did not train neural vision models.
+- Daniel has not published research and has not built agentic or structured-prompt GenAI pipelines.
+- Do not convert classical ML experience into GenAI or computer-vision claims.

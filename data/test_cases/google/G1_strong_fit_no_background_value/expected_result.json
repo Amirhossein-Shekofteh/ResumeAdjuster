@@ -1,0 +1,11 @@
+{
+  "case_id": "G1_google_already_fit_no_background_value",
+  "job_id": "google_android_large_screen",
+  "expected_agent2_decision": "keep_already_strong",
+  "scenario": "The resume already fits the role, and the background provides no additional useful evidence.",
+  "expected_behavior": [
+    "Return the original resume without material changes.",
+    "Explain that the resume already covers the role's core requirements.",
+    "Do not invent preferred qualifications that are not supported."
+  ]
+}

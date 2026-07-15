@@ -1,0 +1,23 @@
+Additional Background for Daniel Kim
+
+The visible resume is outdated and omits Daniel's most relevant research and internal product work. The following details are truthful and may be used to revise it.
+
+### StreamMetrics Generative Media Research Program | March 2021 – Present
+- Daniel has spent more than four years building machine-learning models for production streaming and media applications, in addition to his earlier business-ML experience.
+- Researched and trained latent diffusion models for controllable key-art generation and short promotional-video synthesis using PyTorch.
+- Implemented classifier-free guided sampling, LoRA-based parameter-efficient adaptation, and test-time prompt adaptation; reduced campaign-specific training cost by 37%.
+- Built a rectified-flow/flow-matching prototype for vector-graphic and motion-template generation and compared quality, controllability, and inference speed against diffusion baselines.
+- Developed a multimodal video-understanding workflow combining frame embeddings, audio transcripts, metadata, and a visual-language model for scene retrieval and content localization.
+- Built structured prompt orchestration and an agentic evaluation pipeline that selected tools, generated candidate assets, ran automated quality checks, and routed low-confidence results to human reviewers.
+- Developed visual-grounding and segmentation models for identifying characters and objects in promotional footage.
+- Integrated matting, monocular depth estimation, and lightweight 3D reconstruction into pre-visualization and compositing prototypes.
+- Productionized GPU inference services and used Spark/Hadoop pipelines for large-scale frame extraction, embedding generation, and offline evaluation across millions of video segments.
+- Programmed production and research components in Python, Java, and C++ using PyTorch, TensorFlow, NumPy, SciPy, and scikit-learn.
+- Designed offline experiments and A/B tests and partnered with product, creative, and engineering stakeholders to launch model-assisted media workflows.
+
+### Graduate Applied Research | 2016 – 2018
+- Master's thesis: controllable neural image generation with conditional GANs and early diffusion-style denoising objectives.
+- Completed graduate coursework in deep learning, computer vision, probabilistic graphical models, and distributed systems.
+
+### Qualification clarification
+- Daniel has a Master's degree and more than seven years of applied ML/model-building experience, including more than four years focused on deep learning, computer vision, and generative media systems.
