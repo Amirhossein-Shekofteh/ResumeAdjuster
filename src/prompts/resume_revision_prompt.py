@@ -30,20 +30,31 @@ RESUME_REVISION_SYSTEM_PROMPT = dedent(
     deciding whether a revision is worthwhile, alongside gaps_to_address and
     resume_evidence_to_preserve.
 
-    Before writing anything, decide which of three outcomes applies, and set
-    the `decision` field accordingly:
-    - "revise": truthful evidence from the current resume or the coursework/
-      student background information can meaningfully strengthen the resume
-      for this role. This is the common case.
+    Before writing anything, do a per-gap review: go through every gap in
+    revision_brief.gaps_to_address one at a time, and for each one, check
+    whether the current resume or the coursework/student background
+    information contains truthful evidence that closes it, fully or
+    partially. Note which gaps have real supporting evidence and which do
+    not -- especially any tied to must_address_requirement_ids. Do not skip
+    this step or judge fit only from estimated_fit_score in the abstract;
+    the per-gap review is what your decision must actually be based on.
+
+    Only after that per-gap review, decide which of three outcomes applies,
+    and set the `decision` field accordingly:
+    - "revise": the per-gap review found truthful evidence, in the current
+      resume or the coursework/student background information, that can
+      meaningfully strengthen the resume for at least one gap. This is the
+      common case.
     - "keep_already_strong": resume_evidence_to_preserve and a high
-      estimated_fit_score indicate the resume already fits this role well, and
-      no truthful change would meaningfully improve it.
+      estimated_fit_score indicate the resume already fits this role well,
+      and the per-gap review did not surface any truthful change that would
+      meaningfully improve it.
     - "keep_insufficient_fit": the gaps_to_address are significant (especially
-      any tied to must_address_requirement_ids), and neither the current
-      resume nor the coursework/student background information gives you
-      truthful material to close them. Revising would require fabricating or
-      stretching evidence, so it is more honest to leave the resume unchanged
-      and tell the student why.
+      any tied to must_address_requirement_ids), and the per-gap review found
+      that neither the current resume nor the coursework/student background
+      information gives you truthful material to close them. Revising would
+      require fabricating or stretching evidence, so it is more honest to
+      leave the resume unchanged and tell the student why.
 
     Hard rule for "keep_already_strong" and "keep_insufficient_fit": you must
     return updated_resume_markdown exactly as the original current resume,
@@ -55,8 +66,10 @@ RESUME_REVISION_SYSTEM_PROMPT = dedent(
 
     Core responsibilities:
     1. Read the current resume.
-    2. Read the coursework and student background information.
-    3. Read Agent 1's structured revision brief.
+    2. Read Agent 1's structured revision brief, in particular
+       gaps_to_address and must_address_requirement_ids.
+    3. Read the coursework and student background information, checking it
+       against each gap from the brief (the per-gap review described above).
     4. Determine which gaps can be truthfully addressed using the student's
        coursework, projects, tools, labs, class assignments, certifications,
        student work, or related background.
@@ -185,13 +198,18 @@ def build_resume_revision_user_prompt(
 
         {current_resume}
 
-        # Coursework and Student Background Information
-
-        {coursework_student_info}
-
         # Agent 1 Revision Brief
 
         {serialized_revision_brief}
+
+        # Coursework and Student Background Information
+
+        Read the gaps_to_address and must_address_requirement_ids above
+        first, then use this section to do the per-gap review: for each gap,
+        check whether the information below contains truthful evidence that
+        closes it.
+
+        {coursework_student_info}
 
         # What to produce
 
