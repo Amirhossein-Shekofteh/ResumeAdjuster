@@ -44,7 +44,16 @@ workshop starts so the task itself is pure coding.
    executable on your system `PATH` (installed in step 3); it does not install `pandoc`
    itself, which is why that has to happen first.
 
-5. **`.env` file** — if you haven't already (per the main `README.md`), create a `.env`
+5. **Get a Google AI Studio (Gemini) API key** (skip this if you're using
+   `LLM_PROVIDER=openai` with your own OpenAI key instead):
+   - Go to https://aistudio.google.com/apikey and sign in.
+   - Click **Create API Key** → **Create API key in new project**.
+   - Copy the key and save it — you'll paste it into `GEMINI_API_KEY` in your `.env`
+     file (step 6 below), not into any external tool.
+   - Create it the day before the workshop (not weeks ahead), and keep it private —
+     don't commit it or share it in chat.
+
+6. **`.env` file** — if you haven't already (per the main `README.md`), create a `.env`
    with the same keys as `.env.example` so `streamlit run app.py` can call the agents.
    Either copy the template and edit it in your editor:
    ```
@@ -69,4 +78,4 @@ workshop starts so the task itself is pure coding.
 
 `pandoc` and `tectonic` are OS-level binaries, not Python packages — that's why they
 can't simply live in `requirements.txt` and get pulled in by `pip install`. Once steps
-1–5 are done, you're ready to start [WORKSHOP_TASK.md](WORKSHOP_TASK.md).
+1–6 are done, you're ready to start [WORKSHOP_TASK.md](WORKSHOP_TASK.md).
